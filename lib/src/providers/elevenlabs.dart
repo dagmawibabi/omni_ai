@@ -125,9 +125,17 @@ class ElevenLabsProvider extends AiProvider {
       net.json(await net.get(Uri.parse('$baseUrl/user'), headers: headers(), timeout: const Duration(seconds: 20)));
       return null;
     } on AiException catch (e) {
+      // A key restricted to some features (no user_read) is still a good
+      // key: ElevenLabs only says it lacks that permission.
+      if (isMissingPermission(e)) return null;
       return e.message;
     }
   }
+
+  /// ElevenLabs refused because the key lacks a permission (a restricted
+  /// key), not because the key is wrong.
+  static bool isMissingPermission(AiException e) =>
+      (e.statusCode == 401 || e.statusCode == 403) && RegExp(r'missing_permissions|missing the permission', caseSensitive: false).hasMatch('${e.body ?? ''} ${e.message}');
 
   /// Characters used and left this period: `{character_count, character_limit, tier…}`.
   Future<Map<String, dynamic>> subscription() async =>

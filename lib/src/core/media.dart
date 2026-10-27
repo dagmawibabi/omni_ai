@@ -6,18 +6,21 @@ class GeneratedFile {
   const GeneratedFile(this.bytes, {required this.mediaType, this.url});
 
   /// Decodes a `data:` URL.
-  factory GeneratedFile.fromDataUrl(String dataUrl) {
-    final comma = dataUrl.indexOf(',');
-    final header = dataUrl.substring(5, comma);
-    final mediaType = header.split(';').first;
-    return GeneratedFile(
-      base64Decode(dataUrl.substring(comma + 1)),
-      mediaType: mediaType.isEmpty ? 'application/octet-stream' : mediaType,
-    );
-  }
+  factory GeneratedFile.fromDataUrl(String dataUrl) => GeneratedFile.fromBase64(dataUrl);
 
+  /// Decodes base64 the way providers send it: plain, as a `data:` URL,
+  /// with line breaks, URL-safe, or without padding. A `data:` URL's type
+  /// is used when [mediaType] isn't given; otherwise it is read from the
+  /// bytes.
   factory GeneratedFile.fromBase64(String data, {String? mediaType}) {
-    final bytes = base64Decode(data);
+    var text = data.trim();
+    if (text.startsWith('data:')) {
+      final comma = text.indexOf(',');
+      final type = text.substring(5, comma < 0 ? text.length : comma).split(';').first;
+      if (type.isNotEmpty) mediaType ??= type;
+      text = comma < 0 ? '' : text.substring(comma + 1);
+    }
+    final bytes = decodeBase64(text);
     return GeneratedFile(bytes, mediaType: mediaType ?? sniffMediaType(bytes));
   }
 
@@ -112,4 +115,13 @@ Uint8List pcmToWav(Uint8List pcm, {int sampleRate = 24000, int channels = 1, int
     ..setUint32(36, 0x64617461) // data
     ..setUint32(40, pcm.length, Endian.little);
   return Uint8List.fromList([...header.buffer.asUint8List(), ...pcm]);
+}
+
+/// Base64 to bytes, forgiving whitespace, the URL-safe alphabet and
+/// missing padding.
+Uint8List decodeBase64(String data) {
+  var s = data.replaceAll(RegExp(r'\s'), '').replaceAll('-', '+').replaceAll('_', '/');
+  final rest = s.length % 4;
+  if (rest != 0) s = s.padRight(s.length + 4 - rest, '=');
+  return base64Decode(s);
 }

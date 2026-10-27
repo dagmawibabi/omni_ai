@@ -197,6 +197,36 @@ void main() {
     });
   });
 
+  group('Media', () {
+    test('base64 from providers decodes as a data URL, with line breaks, URL-safe or unpadded', () {
+      final mp3 = Uint8List.fromList([0x49, 0x44, 0x33, 4, 0, 0, 0, 0]);
+      final b64 = base64Encode(mp3);
+      for (final form in [b64, 'data:audio/mpeg;base64,$b64', '${b64.substring(0, 4)}\n${b64.substring(4)}', b64.replaceAll('=', '')]) {
+        final f = GeneratedFile.fromBase64(form);
+        expect(f.bytes, mp3, reason: form);
+        expect(f.mediaType, 'audio/mpeg', reason: form);
+      }
+      expect(GeneratedFile.fromDataUrl('data:audio/wav;base64,$b64').mediaType, 'audio/wav');
+    });
+
+    test('a restricted ElevenLabs key counts as working', () async {
+      final eleven = ElevenLabsProvider(
+        apiKey: 'k',
+        httpClient: MockClient((_) async => http.Response(
+            jsonEncode({
+              'detail': {'status': 'missing_permissions', 'message': 'The API key you used is missing the permission user_read to execute this operation.'}
+            }),
+            401)),
+      );
+      expect(await eleven.verify(), isNull);
+      final wrong = ElevenLabsProvider(
+        apiKey: 'k',
+        httpClient: MockClient((_) async => http.Response(jsonEncode({'detail': {'status': 'invalid_api_key', 'message': 'Invalid API key'}}), 401)),
+      );
+      expect(await wrong.verify(), isNotNull);
+    });
+  });
+
   group('Tool calls', () {
     test('an approval can edit the input or explain a refusal', () async {
       final ran = <Object?>[];

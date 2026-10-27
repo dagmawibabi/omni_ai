@@ -1,3 +1,8 @@
+## 0.4.1
+
+- Fixed: Addis AI speech failed with a `FormatException` when the audio came as a `data:` URL. `GeneratedFile.fromBase64` (and `fromDataUrl`) now take data URLs, line breaks, URL-safe base64 and missing padding; `decodeBase64` does the same for any string.
+- Fixed: restricted ElevenLabs keys (without `user_read`) failed `verify()` though they work; `ElevenLabsProvider.isMissingPermission` tells the two apart.
+
 ## 0.4.0
 
 Found while moving the teleai app onto omni_ai's agents.
