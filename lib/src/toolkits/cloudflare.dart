@@ -212,12 +212,14 @@ class CloudflareClient {
     return [for (final b in (list as List? ?? const []).whereType<Map>()) '${b['name']}'];
   }
 
-  Future<Map<String, dynamic>> listObjects(String bucket, {String prefix = '', int max = 200, String? cursor}) async {
+  /// Objects in [bucket] under [prefix]: one folder level (with `folders`)
+  /// when [delimiter], or every object below it when not.
+  Future<Map<String, dynamic>> listObjects(String bucket, {String prefix = '', bool delimiter = true, int max = 200, String? cursor}) async {
     final xml = (await s3('GET', bucket, query: {
       'list-type': '2',
       'max-keys': '${max.clamp(1, 1000)}',
       if (prefix.isNotEmpty) 'prefix': prefix,
-      'delimiter': '/',
+      if (delimiter) 'delimiter': '/',
       if (cursor != null) 'continuation-token': cursor,
     }))
         .body;
@@ -227,7 +229,12 @@ class CloudflareClient {
       'folders': [for (final p in _tags(xml, 'CommonPrefixes')) _tag(p, 'Prefix')],
       'objects': [
         for (final o in _tags(xml, 'Contents'))
-          {'key': _tag(o, 'Key'), 'size': int.tryParse(_tag(o, 'Size') ?? ''), 'modified': _tag(o, 'LastModified')},
+          {
+            'key': _tag(o, 'Key'),
+            'size': int.tryParse(_tag(o, 'Size') ?? ''),
+            'modified': _tag(o, 'LastModified'),
+            'etag': _tag(o, 'ETag')?.replaceAll('"', '').replaceAll('&quot;', ''),
+          },
       ],
       if (_tag(xml, 'IsTruncated') == 'true') 'next_cursor': _tag(xml, 'NextContinuationToken'),
     };

@@ -12,12 +12,52 @@ import '../core/tools.dart';
 
 /// A running E2B sandbox.
 class E2BSandbox {
-  const E2BSandbox({required this.id, required this.domain, this.envdToken, this.trafficToken, required this.template});
+  const E2BSandbox({required this.id, required this.domain, this.envdToken, this.trafficToken, required this.template, this.startedAt});
   final String id;
   final String domain;
   final String? envdToken;
   final String? trafficToken;
   final String template;
+
+  /// When [E2BClient.create] made it.
+  final DateTime? startedAt;
+}
+
+/// A sandbox from the account's list ([E2BClient.sandboxes]).
+class E2BSandboxInfo {
+  const E2BSandboxInfo({required this.id, required this.template, required this.state, this.startedAt, this.endAt, this.cpus, this.memoryMb});
+
+  factory E2BSandboxInfo.fromJson(Map s) => E2BSandboxInfo(
+        id: '${s['sandboxID']}',
+        template: '${s['alias'] ?? s['templateID'] ?? ''}',
+        state: '${s['state'] ?? ''}',
+        startedAt: DateTime.tryParse('${s['startedAt']}'),
+        endAt: DateTime.tryParse('${s['endAt']}'),
+        cpus: (s['cpuCount'] as num?)?.toInt(),
+        memoryMb: (s['memoryMB'] as num?)?.toInt(),
+      );
+
+  final String id;
+  final String template;
+
+  /// `running` or `paused`.
+  final String state;
+  final DateTime? startedAt;
+
+  /// When E2B will stop it.
+  final DateTime? endAt;
+  final int? cpus;
+  final int? memoryMb;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'template': template,
+        'state': state,
+        if (startedAt != null) 'started': startedAt!.toIso8601String(),
+        if (endAt != null) 'ends': endAt!.toIso8601String(),
+        if (cpus != null) 'cpus': cpus,
+        if (memoryMb != null) 'memory_mb': memoryMb,
+      };
 }
 
 /// What running code produced: printed output, results (text, images,
@@ -25,8 +65,16 @@ class E2BSandbox {
 class E2BExecution {
   final stdout = StringBuffer();
   final stderr = StringBuffer();
+  /// Each output (`text`, `png`, `html`, `json`…); the cell's value has
+  /// `main: true`.
   final results = <Map<String, dynamic>>[];
   Map<String, dynamic>? error;
+
+  /// The interpreter's execution number, like Jupyter's `[3]`.
+  int? count;
+
+  /// The cell's value as text, like the last line of a notebook cell.
+  String? get text => results.where((r) => r['main'] == true).firstOrNull?['text'] as String?;
 
   /// Images the code drew (charts), decoded.
   List<GeneratedFile> get images => [
@@ -45,7 +93,7 @@ class E2BExecution {
       for (final r in results)
         {
           for (final e in r.entries)
-            if (!const {'png', 'jpeg', 'svg', 'pdf'}.contains(e.key)) e.key: e.value is String ? clip(e.value as String, 4000) : e.value
+            if (!const {'png', 'jpeg', 'svg', 'pdf', 'main'}.contains(e.key)) e.key: e.value is String ? clip(e.value as String, 4000) : e.value
         },
     ]..removeWhere((r) => r.isEmpty);
     final pictures = images.length;
@@ -64,8 +112,7 @@ class E2BExecution {
 /// Get a key at https://e2b.dev/dashboard?tab=keys.
 class E2BClient {
   E2BClient({this.apiKey, http.Client? httpClient})
-      : _net = AiHttp(provider: 'E2B', client: httpClient),
-        _injected = httpClient;
+      : _net = AiHttp(provider: 'E2B', client: httpClient);
 
   static const api = 'https://api.e2b.app';
   static const defaultTemplate = 'code-interpreter-v1';
@@ -74,14 +121,13 @@ class E2BClient {
 
   String? apiKey;
   final AiHttp _net;
-  final http.Client? _injected;
 
   Map<String, String> get _headers => {'X-API-KEY': apiKey?.trim() ?? ''};
 
   Future<E2BSandbox> create(
       {String template = defaultTemplate, Duration timeout = const Duration(minutes: 10), bool internet = true}) async {
     final j = _net.json(await _net.post(Uri.parse('$api/v2/sandboxes'), headers: _headers, json: {
-      'templateID': template,
+      'templateID': template.trim().isEmpty ? defaultTemplate : template.trim(),
       'timeout': timeout.inSeconds.clamp(30, 3600),
       'allow_internet_access': internet,
       'metadata': {'app': 'omni_ai'},
@@ -94,26 +140,27 @@ class E2BClient {
       envdToken: j['envdAccessToken'] as String?,
       trafficToken: j['trafficAccessToken'] as String?,
       template: '${j['templateID'] ?? template}',
+      startedAt: DateTime.now(),
     );
   }
 
   Future<void> keepAlive(String sandboxId, Duration timeout) async => _net.ensureOk(await _net
       .post(Uri.parse('$api/sandboxes/$sandboxId/timeout'), headers: _headers, json: {'timeout': timeout.inSeconds.clamp(30, 3600)}));
 
+  /// Stops a sandbox. One that is already gone counts as stopped.
   Future<void> kill(String sandboxId) async {
-    final c = _injected ?? http.Client();
-    try {
-      await c.delete(Uri.parse('$api/sandboxes/$sandboxId'), headers: _headers).timeout(const Duration(seconds: 20));
-    } finally {
-      if (_injected == null) c.close();
-    }
+    final r = await _net.delete(Uri.parse('$api/sandboxes/$sandboxId'), headers: _headers, timeout: const Duration(seconds: 20));
+    if (r.statusCode != 404) _net.ensureOk(r);
   }
 
-  /// Sandboxes running on the account.
+  /// Sandboxes running on the account, as E2B lists them.
   Future<List<Map<String, dynamic>>> list() async {
     final j = _net.json(await _net.get(Uri.parse('$api/v2/sandboxes?limit=50'), headers: _headers));
     return [for (final s in (j is List ? j : const []).whereType<Map>()) Map<String, dynamic>.from(s)];
   }
+
+  /// Sandboxes running on the account.
+  Future<List<E2BSandboxInfo>> sandboxes() async => [for (final s in await list()) E2BSandboxInfo.fromJson(s)];
 
   /// Runs [code]; [onOutput] sees printed lines as they come.
   Future<E2BExecution> run(
@@ -152,10 +199,13 @@ class E2BClient {
           case 'result':
             ex.results.add({
               for (final e in msg.entries)
-                if (e.key != 'type' && e.key != 'is_main_result') '${e.key}': e.value
+                if (e.key != 'type' && e.key != 'is_main_result') '${e.key}': e.value,
+              if (msg['is_main_result'] == true) 'main': true,
             });
           case 'error':
             ex.error = {'name': msg['name'], 'value': msg['value'], 'traceback': msg['traceback']};
+          case 'number_of_executions':
+            ex.count = (msg['execution_count'] as num?)?.toInt();
         }
       }
     } on AiException catch (e) {
@@ -200,7 +250,8 @@ print("$_mark" + json.dumps({"b64": base64.b64encode(open(p, "rb").read()).decod
   Future<List<Map<String, dynamic>>> listFiles(E2BSandbox s, String path) async {
     final j = await _py(s, '''
 p = ${jsonEncode(path)}
-out = [{"name": e.name, "dir": e.is_dir(), "size": e.stat().st_size} for e in sorted(os.scandir(p), key=lambda e: (not e.is_dir(), e.name))[:300]]
+import time
+out = [{"name": e.name, "path": os.path.join(p, e.name), "dir": e.is_dir(), "size": e.stat().st_size, "modified": time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(e.stat().st_mtime))} for e in sorted(os.scandir(p), key=lambda e: (not e.is_dir(), e.name))[:300]]
 print("$_mark" + json.dumps({"files": out}))
 ''');
     return [for (final f in (j['files'] as List? ?? const [])) Map<String, dynamic>.from(f as Map)];

@@ -35,10 +35,11 @@ class AiAudio extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Plays [file]. With [wait], completes when it ends.
-  Future<void> play(GeneratedFile file, {bool wait = false, double speed = 1}) async {
+  /// Plays [file]. With [wait], completes when it ends. [id] is what
+  /// [playing] reports meanwhile (the file itself by default).
+  Future<void> play(GeneratedFile file, {bool wait = false, double speed = 1, Object? id}) async {
     await stop();
-    playing = file;
+    playing = id ?? file;
     _finished = Completer<void>();
     notifyListeners();
     await _p.setPlaybackRate(speed);

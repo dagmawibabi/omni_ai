@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../catalog/model_info.dart';
 import '../core/models.dart';
 import '../device/device_speech.dart';
 import '../omni_ai.dart';
@@ -38,8 +39,18 @@ class VoicePicker extends StatefulWidget {
   final String source;
   final String? selected;
   final String? language;
+  /// What a voice without a preview clip says, unless [samples] has a
+  /// line in the voice's language.
   final String sampleText;
   final ValueChanged<Voice> onSelected;
+
+  /// Sample lines by language, for voices that don't speak English (Addis
+  /// AI's Amharic, Afaan Oromo and Tigrinya voices).
+  static const samples = {
+    'am': 'ሰላም! ይህ ድምጼ ነው። ዛሬ በምን ልርዳዎት?',
+    'om': "Akkam jirta! Sagaleen koo kana fakkaata. Har'a maal si gargaaruu danda'a?",
+    'ti': 'ሰላም! ድምጸይ ከምዚ እዩ። ሎሚ ብምንታይ ክሕግዘካ?',
+  };
 
   @override
   State<VoicePicker> createState() => _VoicePickerState();
@@ -63,20 +74,26 @@ class _VoicePickerState extends State<VoicePicker> {
       await DeviceSpeech.instance.speak(widget.sampleText, voice: v.id);
       return;
     }
+    if (audio.playing == v.id || (v.previewUrl != null && audio.playing == v.previewUrl)) return audio.stop();
     if (v.previewUrl != null) {
       await audio.playUrl(v.previewUrl!);
       return;
     }
-    if (audio.playing == v.id) return audio.stop();
     setState(() => _loadingSample = v.id);
     try {
+      // Addis keeps some samples apart from its voice list.
+      final url = v.provider == 'addis' ? await widget.ai.addis.voicePreviewUrl(v.id) : null;
+      if (url != null && url.isNotEmpty) {
+        await audio.playUrl(url);
+        return;
+      }
       final model = widget.ai.providers.any((p) => p.id == widget.source) ? null : widget.source;
       final clip = await widget.ai.generateSpeech(
-        text: widget.sampleText,
-        model: model ?? '${v.provider}:${widget.ai.provider(v.provider).defaultModels.values.first}',
+        text: VoicePicker.samples[v.language] ?? widget.sampleText,
+        model: model ?? '${v.provider}:${widget.ai.provider(v.provider).defaultModels[ModelType.speech]}',
         voice: v.id,
       );
-      await audio.play(clip);
+      await audio.play(clip, id: v.id);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
     } finally {
@@ -121,7 +138,8 @@ class _VoicePickerState extends State<VoicePicker> {
                     itemCount: voices.length,
                     itemBuilder: (context, i) {
                       final v = voices[i];
-                      final playing = AiAudio.instance.playing == v.previewUrl && v.previewUrl != null;
+                      final now = AiAudio.instance.playing;
+                      final playing = now != null && (now == v.id || now == v.previewUrl);
                       return ListTile(
                         selected: v.id == widget.selected,
                         title: Text(v.name),

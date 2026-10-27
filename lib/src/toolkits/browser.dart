@@ -38,6 +38,12 @@ class BrowserSession extends ChangeNotifier {
   String? get url => _url;
   String? get title => _title;
 
+  /// The open page's site, e.g. `example.com`.
+  String? get host {
+    final u = _url == null ? null : Uri.tryParse(_url!);
+    return u == null || u.host.isEmpty ? null : u.host;
+  }
+
   /// What element [i] said at the last read, for approval dialogs.
   String? elementLabel(int i) => _labels[i];
 
@@ -228,6 +234,16 @@ class BrowserSession extends ChangeNotifier {
   }
 
   Future<void> reload() async => _controller?.reload();
+
+  /// Stops a page that is still loading, and any wait for one: for a stop
+  /// button while the AI browses.
+  Future<void> stop() async {
+    if (_loading?.isCompleted == false) _loading!.complete();
+    try {
+      await _controller?.runJavaScript('window.stop()');
+    } catch (_) {}
+    _doing(null);
+  }
 
   /// Closes the page; the view shows nothing until the next open.
   Future<void> close() async {

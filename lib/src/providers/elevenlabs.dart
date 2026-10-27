@@ -40,6 +40,14 @@ class ElevenLabsProvider extends AiProvider {
   @override
   Set<ModelType> get capabilities => const {ModelType.speech, ModelType.transcription, ModelType.soundEffect, ModelType.music};
 
+  /// The text-to-speech models every account has, as (id, name, what it is
+  /// good at): for a model menu without a request.
+  static const speechModels = [
+    (id: 'eleven_flash_v2_5', name: 'Flash v2.5', note: 'Fastest and cheapest'),
+    (id: 'eleven_multilingual_v2', name: 'Multilingual v2', note: 'Rich and steady'),
+    (id: 'eleven_v3', name: 'Eleven v3', note: 'Most expressive'),
+  ];
+
   @override
   Map<ModelType, String> get defaultModels => const {
         ModelType.speech: 'eleven_flash_v2_5',

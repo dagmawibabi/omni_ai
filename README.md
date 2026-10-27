@@ -239,7 +239,11 @@ print(r.text);
 ```
 
 - **Ask first** — `Tool(approval: ApprovalPolicy.always, ...)` (or `.once`, or `ApprovalPolicy.when((input) => ...)`) and `onToolApproval: (call) => showToolApprovalDialog(context, call)`.
+- **Edit before running** — `onToolApproval` may return `ToolApprovalDecision.approve(input: {...})` to run with changed input (an edited message draft), or `ToolApprovalDecision.deny('why')` to tell the model why; `true` / `false` still work.
 - **Hand files to the app** — return `ToolOutput(value, files: [...])`; the files arrive as `FileOutput` parts and show in the chat.
+- **Show the model a picture** — `ToolOutput(value, modelFiles: [FilePart.image(bytes)])` (a screenshot, a photo a tool fetched); tool results can't carry images, so they follow as a user message.
+- **Know which call is running** — `ToolContext.current` inside `execute` has the `call` (its id, for per-call progress) and the `cancelToken`.
+- **One at a time** — `parallelToolCalls: false` runs a step's tools in order instead of together (shared rate limits, approvals asked one by one).
 - **Run tools yourself** — leave out `execute`; the loop stops and the calls are in `r.toolCalls`. Send results back with `Message.toolResults([...])`.
 - **Force a tool** — `toolChoice: ToolChoice.tool('get_weather')`, or `ToolChoice.required` / `.none`.
 - **Stop early** — `stopWhen: (step) => step.toolCalls.any((c) => c.name == 'finish')`.
@@ -418,7 +422,9 @@ final remembered = await ai.memory.all();           // for a "what I remember" s
 final agent = ai.agent(toolkits: [...ai.allToolkits, ai.memoryFiles]);
 ```
 
-Store either anywhere by implementing `MemoryStore` / `MemoryFileStore`.
+Store either anywhere by implementing `MemoryStore` / `MemoryFileStore`. `ai.memory` is a `Listenable`: screens can `addListener` and edit with `save`, `update` and `remove`.
+
+Give an agent only some of a toolkit's tools with `where`, e.g. the ones your user turned on: `toolkits: [ai.memory.where((t) => enabled.contains(t.name))]`.
 
 ### Helper agents
 

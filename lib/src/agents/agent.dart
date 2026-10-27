@@ -85,6 +85,7 @@ class Agent {
     this.onToolApproval,
     this.onAskUser,
     this.providerOptions = const {},
+    this.parallelToolCalls = true,
   })  : _ai = ai,
         assert(RegExp(r'^[A-Za-z0-9_\-]{1,48}$').hasMatch(name), 'Agent names use letters, digits, _ and -.');
 
@@ -121,6 +122,11 @@ class Agent {
   /// Lets the agent ask the user a question mid-task (adds `ask_user`).
   final AskUser? onAskUser;
   final Map<String, dynamic> providerOptions;
+
+  /// Runs the tools of one step at the same time (the default), or one by
+  /// one in order: for tools that share a rate limit, or approvals asked
+  /// one at a time.
+  final bool parallelToolCalls;
 
   OmniAI get ai => _ai ?? OmniAI.instance;
 
@@ -283,7 +289,7 @@ class Agent {
   }
 
   Tool _hooked(Tool t) => t.copyWith(execute: (input) async {
-        final call = ToolCallPart(id: '', name: t.name, input: input);
+        final call = ToolContext.current?.call ?? ToolCallPart(id: '', name: t.name, input: input);
         final early = await hooks.beforeToolCall?.call(call);
         var out = early ?? await t.execute!(input);
         final after = await hooks.afterToolCall?.call(call, out is ToolOutput ? out.value : out);
@@ -358,16 +364,16 @@ class AgentSession {
       final model = a._model;
       var spent = const Usage();
 
-      Future<bool> approve(ToolCallPart call) async {
+      Future<ToolApprovalDecision> approve(ToolCallPart call) async {
         final t = byName[call.name];
-        if (t != null && t.approval.kind == 'once' && approvedOnce.contains(t.name)) return true;
+        if (t != null && t.approval.kind == 'once' && approvedOnce.contains(t.name)) return const ToolApprovalDecision.approve();
         // Let the tool-call part reach listeners first.
         await Future<void>(() {});
         parts.add(ToolApprovalRequest(call));
-        final ok = a.onToolApproval == null ? false : await a.onToolApproval!(call);
-        if (ok && t?.approval.kind == 'once') approvedOnce.add(t!.name);
-        parts.add(ToolApprovalResponse(call, approved: ok));
-        return ok;
+        final decision = ToolApprovalDecision.from(a.onToolApproval == null ? false : await a.onToolApproval!(call));
+        if (decision.approved && t?.approval.kind == 'once') approvedOnce.add(t!.name);
+        parts.add(ToolApprovalResponse(call, approved: decision.approved));
+        return decision;
       }
 
       bool overLimit(StepResult step) {
@@ -392,6 +398,7 @@ class AgentSession {
         temperature: a.temperature,
         providerOptions: a.providerOptions,
         onToolApproval: approve,
+        parallelToolCalls: a.parallelToolCalls,
         onStepFinish: a.hooks.onStepFinish,
         cancelToken: token,
       );

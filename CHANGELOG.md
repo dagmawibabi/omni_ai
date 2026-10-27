@@ -1,3 +1,24 @@
+## 0.4.0
+
+Found while moving the teleai app onto omni_ai's agents.
+
+- **Approvals can edit**: `onToolApproval` may return `ToolApprovalDecision.approve(input: …)` (run with an edited input, e.g. a message draft the user changed) or `ToolApprovalDecision.deny('why')`; bools still work.
+- **`ToolContext.current`** inside a tool's `execute`: the call (id, name, input) and the cancel token. Agent hooks now get the real call id (it was empty).
+- **`parallelToolCalls: false`** on `streamText`, `generateText`, `Agent` and `ai.agent()` runs a step's tools one at a time, in order.
+- **`ToolOutput(modelFiles: …)`**: pictures a tool fetched for the model to look at, sent after the results as a user message.
+- Tool results stream as each tool finishes, and a tool starts only after listeners have seen its call (UIs can show it running).
+- **`Toolkit.where(test)`** keeps only some of a toolkit's tools (its prompt stays).
+- **`AgentMemory`** is a `Listenable` with `save`, `update`, `remove` and `clear` for your own screens; `remember` and `update_memory` return the content; memories saved with a `created` date load.
+- **`ai.verifyKey(id, key: …)`** checks a typed key without setting it, for settings fields.
+- `ai.agent()` takes `temperature`, `providerOptions` and `parallelToolCalls`.
+- **Dictation**: `onTranscribed` reports each cloud transcription with the recording's length (usage, cost). Fixed: errors and status from the device recognizer were lost when `deviceAvailable()` ran first.
+- **Voices**: `VoicePicker` speaks Addis AI samples in the voice's own language (`VoicePicker.samples`), tries Addis's preview endpoint, and can stop a generated sample; `AiAudio.play(id:)`. `ElevenLabsProvider.speechModels` lists the models every account has.
+- **Composio**: a new key or user id gets a new session (the old one was kept); `disconnect` uses the package's HTTP client.
+- **E2B**: `E2BExecution.count` and `.text` (the cell's value, results marked `main`), `E2BSandbox.startedAt`, typed `E2BClient.sandboxes()` / `E2BSandboxInfo`, `listFiles` with paths and dates; `kill` treats a gone sandbox as stopped; a blank template uses the default.
+- **Cloudflare**: `listObjects(delimiter: false)` lists everything under a prefix; objects carry their ETag.
+- **Browser**: `BrowserSession.host` and `stop()`.
+- `AiHttp.delete`.
+
 ## 0.3.0
 
 - **On-device sandbox**: `DeviceSandboxToolkit` / `ai.deviceSandbox` runs Python (Pyodide) or JavaScript in a hidden web view, with input files and output files/charts. Free, no key.

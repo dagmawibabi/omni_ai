@@ -31,6 +31,14 @@ class Dictation extends ChangeNotifier {
   /// e.g. `en_US` for the device, `en` / `am` for cloud models.
   String? language;
 
+  /// Called after each cloud transcription with the recording's length,
+  /// for usage and cost tracking.
+  void Function(TranscriptionResult result, Duration audio)? onTranscribed;
+
+  /// The instance listening now; the recognizer is shared, so its status
+  /// and errors go to whichever one started last.
+  static Dictation? _active;
+
   static final _stt = SpeechToText();
   static bool? _sttReady;
   AudioRecorder? _recorder;
@@ -56,7 +64,7 @@ class Dictation extends ChangeNotifier {
   /// Whether the device recognizer works here.
   static Future<bool> deviceAvailable() async {
     try {
-      return _sttReady ??= await _stt.initialize();
+      return _sttReady ??= await _stt.initialize(onError: _routeError, onStatus: _routeStatus);
     } catch (_) {
       return _sttReady = false;
     }
@@ -111,12 +119,14 @@ class Dictation extends ChangeNotifier {
 
   // -------------------------------------------------------------- device
 
+  // The recognizer is set up once, with these handlers, whichever call
+  // gets there first.
+  static void _routeError(SpeechRecognitionError e) => _active?._onError(e);
+  static void _routeStatus(String status) => _active?._onStatus(status);
+
   Future<void> _startDevice() async {
-    try {
-      _sttReady ??= await _stt.initialize(onError: _onError, onStatus: _onStatus);
-    } catch (_) {
-      _sttReady = false;
-    }
+    await deviceAvailable();
+    _active = this;
     if (_sttReady != true) {
       error = 'Speech recognition is not available. Allow microphone access, or use a cloud transcription model.';
       notifyListeners();
@@ -217,6 +227,7 @@ class Dictation extends ChangeNotifier {
       final wav = pcmToWav(pcm, sampleRate: _rate);
       final r = await model!.transcribe(TranscriptionRequest(audio: wav, mediaType: 'audio/wav', language: language));
       _heard = r.text;
+      onTranscribed?.call(r, Duration(milliseconds: pcm.length * 1000 ~/ (_rate * 2)));
     } catch (e) {
       error = 'Could not transcribe: $e';
       _heard = '';
@@ -243,6 +254,7 @@ class Dictation extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (identical(_active, this)) _active = null;
     _sub?.cancel();
     _amp?.cancel();
     _recorder?.dispose();

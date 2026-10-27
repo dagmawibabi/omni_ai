@@ -15,7 +15,7 @@ class MemoryItem {
         id: '${j['id']}',
         text: '${j['text'] ?? j['content'] ?? ''}',
         tags: [for (final t in (j['tags'] as List? ?? const [])) '$t'],
-        savedAt: DateTime.tryParse('${j['at']}') ?? DateTime.now(),
+        savedAt: DateTime.tryParse('${j['at'] ?? j['created']}') ?? DateTime.now(),
         updatedAt: DateTime.tryParse('${j['updated']}'),
       );
 
@@ -148,7 +148,9 @@ class PrefsMemoryStore implements MemoryStore {
 /// `list_memories`. Nothing is saved unless the AI decides to.
 ///
 /// Works with `ai.generateText(toolkits: [ai.memory])`, chats and agents.
-class AgentMemory extends Toolkit {
+/// It notifies listeners whenever a memory is saved, changed or removed,
+/// by the AI or by your own screens through [save], [update] and [remove].
+class AgentMemory extends Toolkit implements Listenable {
   AgentMemory(
       {MemoryStore? store,
       this.scope = 'default',
@@ -157,6 +159,14 @@ class AgentMemory extends Toolkit {
       : store = store ?? PrefsMemoryStore();
 
   final MemoryStore store;
+
+  final _changes = _Changes();
+
+  @override
+  void addListener(VoidCallback listener) => _changes.addListener(listener);
+  @override
+  void removeListener(VoidCallback listener) => _changes.removeListener(listener);
+  void notifyListeners() => _changes.notify();
 
   /// Whose memory: one user, a team, a chat. Take it from your own sign-in,
   /// never from what the model says.
@@ -181,6 +191,33 @@ class AgentMemory extends Toolkit {
 
   /// All memories for [scope], for a "what I remember" screen.
   Future<List<MemoryItem>> all() => store.list(scope);
+
+  /// Saves a memory, as the `remember` tool does.
+  Future<MemoryItem> save(String text, {List<String> tags = const []}) async {
+    final m = await store.save(scope, text.trim(), tags: tags);
+    notifyListeners();
+    return m;
+  }
+
+  /// Changes a memory; null when there is no such id.
+  Future<MemoryItem?> update(String id, {String? text, List<String>? tags}) async {
+    final m = await store.update(scope, id, text: text?.trim(), tags: tags);
+    if (m != null) notifyListeners();
+    return m;
+  }
+
+  /// Deletes a memory; false when there is no such id.
+  Future<bool> remove(String id) async {
+    final gone = await store.remove(scope, id);
+    if (gone) notifyListeners();
+    return gone;
+  }
+
+  /// Forgets everything in [scope].
+  Future<void> clear() async {
+    await store.clear(scope);
+    notifyListeners();
+  }
 
   /// The memories as `- id: content` lines, or null when there are none.
   Future<String?> recall() async {
@@ -220,8 +257,8 @@ class AgentMemory extends Toolkit {
           execute: (i) async {
             final text = '${i['content'] ?? ''}'.trim();
             if (text.isEmpty) return {'error': 'content is empty'};
-            final m = await store.save(scope, text, tags: [for (final t in (i['tags'] as List? ?? const [])) '$t']);
-            return {'saved': true, 'memory_id': m.id};
+            final m = await save(text, tags: [for (final t in (i['tags'] as List? ?? const [])) '$t']);
+            return {'saved': true, 'memory_id': m.id, 'content': m.text};
           },
         ),
         Tool(
@@ -230,8 +267,8 @@ class AgentMemory extends Toolkit {
           description: 'Rewrites a saved memory (ids are listed in your instructions and by list_memories).',
           parameters: Schema.object({'memory_id': Schema.string(), 'content': Schema.string()}),
           execute: (i) async {
-            final m = await store.update(scope, '${i['memory_id']}', text: '${i['content']}'.trim());
-            return m == null ? {'error': 'No memory with that id.'} : {'updated': true, 'memory_id': m.id};
+            final m = await update('${i['memory_id']}', text: '${i['content']}');
+            return m == null ? {'error': 'No memory with that id.'} : {'updated': true, 'memory_id': m.id, 'content': m.text};
           },
         ),
         Tool(
@@ -239,7 +276,7 @@ class AgentMemory extends Toolkit {
           label: 'Forgetting',
           description: 'Deletes a saved memory, when the user asks you to forget something or it is no longer true.',
           parameters: Schema.object({'memory_id': Schema.string()}),
-          execute: (i) async => await store.remove(scope, '${i['memory_id']}') ? {'forgotten': true} : {'error': 'No memory with that id.'},
+          execute: (i) async => await remove('${i['memory_id']}') ? {'forgotten': true} : {'error': 'No memory with that id.'},
         ),
         Tool(
           name: 'list_memories',
@@ -259,6 +296,10 @@ class AgentMemory extends Toolkit {
           },
         ),
       ];
+}
+
+class _Changes extends ChangeNotifier {
+  void notify() => notifyListeners();
 }
 
 /// The same toolkit under a name that reads better outside agents.

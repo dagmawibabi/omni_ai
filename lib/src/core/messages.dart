@@ -135,6 +135,7 @@ class ToolResultPart extends Part {
     required this.output,
     this.isError = false,
     this.files = const [],
+    this.modelFiles = const [],
   });
   final String toolCallId;
   final String toolName;
@@ -144,6 +145,10 @@ class ToolResultPart extends Part {
   /// Files the tool made for the app (charts, downloads). Not sent to the
   /// model and not saved with the message.
   final List<GeneratedFile> files;
+
+  /// Files for the model to look at (see `ToolOutput.modelFiles`); they are
+  /// sent as a user message after the results.
+  final List<FilePart> modelFiles;
 
   /// [output] as text for providers that take a string.
   String get outputText => output is String ? output as String : jsonEncode(output);

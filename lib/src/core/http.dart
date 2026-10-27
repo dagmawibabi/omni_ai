@@ -56,6 +56,14 @@ class AiHttp {
             .timeout(timeout),
       );
 
+  Future<http.Response> delete(
+    Uri url, {
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 45),
+    CancelToken? cancelToken,
+  }) =>
+      _run(cancelToken, (c) => c.delete(url, headers: headers).timeout(timeout));
+
   Future<http.Response> multipart(
     Uri url, {
     Map<String, String>? headers,

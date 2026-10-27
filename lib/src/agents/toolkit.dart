@@ -46,8 +46,43 @@ abstract class Toolkit implements KeyedService {
   /// Frees sandboxes or sessions the toolkit opened.
   Future<void> dispose() async {}
 
+  /// This toolkit with only the tools that pass [test], e.g. the ones your
+  /// user turned on. Its prompt and key stay the same.
+  ///
+  /// ```dart
+  /// toolkits: [ai.memory.where((t) => t.name != 'forget_memory')]
+  /// ```
+  Toolkit where(bool Function(Tool tool) test) => _FilteredToolkit(this, test);
+
   @override
   String toString() => '$name toolkit';
+}
+
+class _FilteredToolkit extends Toolkit {
+  _FilteredToolkit(this._inner, this._test);
+  final Toolkit _inner;
+  final bool Function(Tool tool) _test;
+
+  @override
+  String get id => _inner.id;
+  @override
+  String get name => _inner.name;
+  @override
+  String? get apiKeyUrl => _inner.apiKeyUrl;
+  @override
+  bool get needsApiKey => _inner.needsApiKey;
+  @override
+  bool get isConfigured => _inner.isConfigured;
+  @override
+  Future<String?> verify() => _inner.verify();
+  @override
+  String? get instructions => _inner.instructions;
+  @override
+  Future<String?> prompt() => _inner.prompt();
+  @override
+  Future<List<Tool>> tools() async => (await _inner.tools()).where(_test).toList();
+  @override
+  Future<void> dispose() => _inner.dispose();
 }
 
 /// Tools that need no key: the time, fetching a web page, and arithmetic.

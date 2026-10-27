@@ -12,8 +12,9 @@ import '../core/usage.dart';
 import '../agents/toolkit.dart';
 import 'replay_stream.dart';
 
-/// Asks before a tool marked `needsApproval` runs. Return false to refuse.
-typedef ToolApproval = FutureOr<bool> Function(ToolCallPart call);
+/// Asks before a tool marked `needsApproval` runs. Return true or false,
+/// or a [ToolApprovalDecision] to change the input or explain a refusal.
+typedef ToolApproval = FutureOr<Object?> Function(ToolCallPart call);
 
 /// One model call inside a generation.
 class StepResult {
@@ -143,6 +144,7 @@ StreamTextResult streamText({
   Map<String, dynamic> providerOptions = const {},
   Map<String, String> headers = const {},
   ToolApproval? onToolApproval,
+  bool parallelToolCalls = true,
   void Function(StepResult step)? onStepFinish,
   void Function(GenerateTextResult result)? onFinish,
   void Function(Object error)? onError,
@@ -244,26 +246,46 @@ StreamTextResult streamText({
       final clientSide = calls.any((c) => toolMap[c.name] != null && toolMap[c.name]!.execute == null);
       final runnable = calls.isNotEmpty && !clientSide;
       if (runnable) {
-        results.addAll(await Future.wait([
-          for (final c in calls)
-            toolMap[c.name] == null
-                // An unknown name goes back as an error the model can fix.
-                ? Future.value(ToolResultPart(
-                    toolCallId: c.id,
-                    toolName: c.name,
-                    output: {'error': 'There is no tool "${c.name}". Available: ${toolMap.keys.join(', ')}.'},
-                    isError: true,
-                  ))
-                : _runTool(toolMap[c.name]!, c, onToolApproval),
-        ]));
-        for (final r in results) {
+        Future<ToolResultPart> one(ToolCallPart c) async {
+          // Let listeners (an agent relaying the stream, a chat UI) see the
+          // call before its tool runs, so they can show it as running.
+          await Future<void>(() {});
+          final tool = toolMap[c.name];
+          final r = tool == null
+              // An unknown name goes back as an error the model can fix.
+              ? ToolResultPart(
+                  toolCallId: c.id,
+                  toolName: c.name,
+                  output: {'error': 'There is no tool "${c.name}". Available: ${toolMap.keys.join(', ')}.'},
+                  isError: true,
+                )
+              : await _runTool(tool, c, onToolApproval, cancelToken);
+          // Results stream as each tool finishes.
           for (final f in r.files) {
             stepFiles.add(f);
             parts.add(FileOutput(f));
           }
           parts.add(ToolResult(r));
+          return r;
+        }
+
+        if (parallelToolCalls) {
+          results.addAll(await Future.wait([for (final c in calls) one(c)]));
+        } else {
+          // One at a time, in order: for tools that share a rate limit or
+          // ask a person one question at a time.
+          for (final c in calls) {
+            results.add(cancelToken?.isCancelled ?? false
+                ? ToolResultPart(toolCallId: c.id, toolName: c.name, output: {'error': 'Cancelled before it ran.'}, isError: true)
+                : await one(c));
+          }
         }
         stepMessages.add(Message.toolResults(results));
+        // Pictures tools fetched for the model follow as a user turn.
+        final seen = [for (final r in results) ...r.modelFiles];
+        if (seen.isNotEmpty) {
+          stepMessages.add(Message(Role.user, [const TextPart('The files the tools returned for you to look at, in order:'), ...seen]));
+        }
       }
 
       final result = StepResult(
@@ -336,6 +358,7 @@ Future<GenerateTextResult> generateText({
   Map<String, dynamic> providerOptions = const {},
   Map<String, String> headers = const {},
   ToolApproval? onToolApproval,
+  bool parallelToolCalls = true,
   void Function(StepResult step)? onStepFinish,
   CancelToken? cancelToken,
 }) =>
@@ -362,32 +385,39 @@ Future<GenerateTextResult> generateText({
       providerOptions: providerOptions,
       headers: headers,
       onToolApproval: onToolApproval,
+      parallelToolCalls: parallelToolCalls,
       onStepFinish: onStepFinish,
       cancelToken: cancelToken,
     ).result;
 
-Future<ToolResultPart> _runTool(Tool tool, ToolCallPart call, ToolApproval? approve) async {
+Future<ToolResultPart> _runTool(Tool tool, ToolCallPart call, ToolApproval? approve, CancelToken? cancelToken) async {
   if (tool.approval.requires(call.input)) {
-    final ok = approve == null ? false : await approve(call);
-    if (!ok) {
+    final decision = ToolApprovalDecision.from(approve == null ? false : await approve(call));
+    if (!decision.approved) {
       return ToolResultPart(
         toolCallId: call.id,
         toolName: call.name,
-        output: {'error': 'The user did not allow this tool to run.'},
+        output: {'error': decision.reason ?? 'The user did not allow this tool to run.'},
         isError: true,
       );
     }
+    if (decision.input != null) {
+      call = ToolCallPart(id: call.id, name: call.name, input: decision.input!, providerData: call.providerData);
+    }
   }
   try {
-    var out = await tool.execute!(call.input);
+    final input = call.input;
+    var out = await ToolContext(call: call, cancelToken: cancelToken).run(() async => await tool.execute!(input));
     var files = const <GeneratedFile>[];
+    var modelFiles = const <FilePart>[];
     if (out is ToolOutput) {
       files = out.files;
+      modelFiles = out.modelFiles;
       out = out.value;
     }
     // Make sure the output can be sent back as JSON.
     final safe = out == null || out is String || out is num || out is bool ? out : jsonDecode(jsonEncode(out));
-    return ToolResultPart(toolCallId: call.id, toolName: call.name, output: safe, files: files);
+    return ToolResultPart(toolCallId: call.id, toolName: call.name, output: safe, files: files, modelFiles: modelFiles);
   } catch (e) {
     return ToolResultPart(
       toolCallId: call.id,

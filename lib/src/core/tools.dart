@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'cancel.dart';
 import 'media.dart';
+import 'messages.dart';
 
 /// A JSON Schema, built without writing maps by hand.
 ///
@@ -50,10 +52,66 @@ typedef ToolExecute = FutureOr<Object?> Function(Map<String, dynamic> input);
 
 /// A tool result with files for the app. The model sees [value]; the app
 /// gets [files] as `FileOutput` stream parts.
+///
+/// [modelFiles] are images (or PDFs, audio) for the model itself to look
+/// at, such as a screenshot or a photo a tool fetched. Tool results can't
+/// carry pictures in most APIs, so they follow the results as a user
+/// message.
 class ToolOutput {
-  const ToolOutput(this.value, {this.files = const []});
+  const ToolOutput(this.value, {this.files = const [], this.modelFiles = const []});
   final Object? value;
   final List<GeneratedFile> files;
+  final List<FilePart> modelFiles;
+}
+
+/// What a person decided about a tool call. `onToolApproval` may return
+/// one instead of a bool, to change the call's input before it runs (an
+/// edited message draft) or to tell the model why it was refused.
+///
+/// ```dart
+/// onToolApproval: (call) async {
+///   final text = await showDraftEditor(call.input['text']);
+///   return text == null
+///       ? const ToolApprovalDecision.deny('The user declined. Don't retry unless they ask.')
+///       : ToolApprovalDecision.approve(input: {...call.input, 'text': text});
+/// }
+/// ```
+class ToolApprovalDecision {
+  const ToolApprovalDecision.approve({this.input})
+      : approved = true,
+        reason = null;
+  const ToolApprovalDecision.deny([this.reason])
+      : approved = false,
+        input = null;
+
+  final bool approved;
+
+  /// Replaces the model's input when approved.
+  final Map<String, dynamic>? input;
+
+  /// Sent to the model when refused.
+  final String? reason;
+
+  /// Reads what an approval callback returned: a decision, or a bool.
+  static ToolApprovalDecision from(Object? value) =>
+      value is ToolApprovalDecision ? value : (value == true ? const ToolApprovalDecision.approve() : const ToolApprovalDecision.deny());
+}
+
+/// The call a tool is running for, and the generation's cancel token.
+/// Read it with [ToolContext.current] inside `execute`, to tell calls
+/// apart (say, to show progress per call) or to stop work on cancel.
+class ToolContext {
+  const ToolContext({required this.call, this.cancelToken});
+  final ToolCallPart call;
+  final CancelToken? cancelToken;
+
+  static const _key = #omniAiToolContext;
+
+  /// The context of the tool running now, or null outside a tool.
+  static ToolContext? get current => Zone.current[_key] as ToolContext?;
+
+  /// Runs [body] with this as [current].
+  R run<R>(R Function() body) => runZoned(body, zoneValues: {_key: this});
 }
 
 /// When a tool must be approved by a person before it runs.

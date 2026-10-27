@@ -58,6 +58,10 @@ class ComposioClient {
   final AiHttp _net;
   String? _session;
 
+  /// The key and user [_session] was made for; a new key or user needs a
+  /// new session.
+  String? _sessionFor;
+
   Map<String, String> get _headers => {'x-api-key': apiKey?.trim() ?? ''};
 
   /// A clearer reason than the API gives for the wrong kind of key.
@@ -74,7 +78,8 @@ class ComposioClient {
       _net.json(await _net.post(Uri.parse('$base$path'), headers: _headers, json: body, timeout: const Duration(minutes: 2)));
 
   Future<String> _sessionId({bool fresh = false}) async {
-    if (!fresh && _session != null) return _session!;
+    final owner = '${apiKey?.trim()} $userId';
+    if (!fresh && _session != null && _sessionFor == owner) return _session!;
     final j = await _post('/tool_router/session', {
       'user_id': userId,
       'manage_connections': {'enable': false},
@@ -82,6 +87,7 @@ class ComposioClient {
     });
     final id = j is Map ? '${j['session_id'] ?? ''}' : '';
     if (id.isEmpty) throw const AiException('Composio did not return a session.', provider: 'composio');
+    _sessionFor = owner;
     return _session = id;
   }
 
@@ -142,8 +148,7 @@ class ComposioClient {
   }
 
   Future<void> disconnect(String accountId) async {
-    final r = await http.delete(Uri.parse('$base/connected_accounts/$accountId'), headers: _headers);
-    _net.ensureOk(r);
+    _net.ensureOk(await _net.delete(Uri.parse('$base/connected_accounts/$accountId'), headers: _headers));
   }
 
   /// Searches the catalog of actions.

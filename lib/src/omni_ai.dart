@@ -250,6 +250,9 @@ class OmniAI extends ChangeNotifier {
     ReasoningEffort? reasoning,
     gen.ToolApproval? onToolApproval,
     AskUser? onAskUser,
+    double? temperature,
+    Map<String, dynamic> providerOptions = const {},
+    bool parallelToolCalls = true,
   }) =>
       Agent(
         ai: this,
@@ -267,6 +270,9 @@ class OmniAI extends ChangeNotifier {
         reasoning: reasoning,
         onToolApproval: onToolApproval,
         onAskUser: onAskUser,
+        temperature: temperature,
+        providerOptions: providerOptions,
+        parallelToolCalls: parallelToolCalls,
       );
 
   // ---------------------------------------------------------------- keys
@@ -357,9 +363,22 @@ class OmniAI extends ChangeNotifier {
     }
   }
 
-  /// Checks a provider's key. Null means it works.
-  Future<String?> verifyKey(String providerId) =>
-      _providers.containsKey(providerId) ? provider(providerId).verify() : toolkit(providerId).verify();
+  /// Checks a provider's or toolkit's key. Null means it works.
+  ///
+  /// With [key], checks that key instead of the one set, without setting
+  /// it: for a settings field, before saving what was typed.
+  Future<String?> verifyKey(String providerId, {String? key}) async {
+    if (key != null) {
+      final probe = OmniAI(keyStore: MemoryKeyStore(), loadSavedKeys: false);
+      try {
+        await probe.setApiKey(providerId, key, persist: false);
+        return await probe.verifyKey(providerId);
+      } finally {
+        probe.dispose();
+      }
+    }
+    return _providers.containsKey(providerId) ? provider(providerId).verify() : toolkit(providerId).verify();
+  }
 
   /// Sets (and saves) Cloudflare's account id and, optionally, R2 keys for
   /// the R2 file tools.
