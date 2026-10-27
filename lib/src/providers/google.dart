@@ -388,7 +388,7 @@ class GeminiModel implements LanguageModel {
     } else {
       events = sseData(p.net.lines(req, cancelToken: cancelToken)).handleError(
         (Object e) => throw _RetryPlain(),
-        test: (e) => !wrote && e is AiException && e.statusCode == 400 && '${e.message}'.toLowerCase().contains('think'),
+        test: (e) => !wrote && e is AiException && e.statusCode == 400 && e.message.toLowerCase().contains('think'),
       );
     }
     await for (final data in events) {
