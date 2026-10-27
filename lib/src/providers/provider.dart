@@ -1,3 +1,4 @@
+import '../agents/toolkit.dart';
 import '../catalog/model_info.dart';
 import '../core/cancel.dart';
 import '../core/errors.dart';
@@ -7,17 +8,20 @@ import '../core/models.dart';
 ///
 /// Each provider makes typed models from its own model ids:
 /// `provider.languageModel('openai/gpt-5')`.
-abstract class AiProvider {
+abstract class AiProvider implements KeyedService {
   /// Short id used in model refs: `gateway` in `gateway:openai/gpt-5`.
+  @override
   String get id;
 
   /// Display name.
+  @override
   String get name;
 
   /// What this provider can do.
   Set<ModelType> get capabilities;
 
   /// Where people get an API key, for settings screens.
+  @override
   String? get apiKeyUrl => null;
 
   /// Its documentation.
@@ -27,9 +31,11 @@ abstract class AiProvider {
   String? get modelsDevId => null;
 
   /// False for local servers like LM Studio.
+  @override
   bool get needsApiKey => true;
 
   /// Whether a key (or server address) is set.
+  @override
   bool get isConfigured;
 
   LanguageModel languageModel(String modelId) => throw _unsupported('chat');
@@ -47,6 +53,7 @@ abstract class AiProvider {
 
   /// Checks the key with a cheap call. Returns null when it works, or what
   /// went wrong in words.
+  @override
   Future<String?> verify();
 
   /// Default model ids for each job, used when no model is given.

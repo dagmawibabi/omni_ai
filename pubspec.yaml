@@ -2,8 +2,9 @@ name: omni_ai
 description: >-
   One easy Flutter API for every AI provider: Vercel AI Gateway, Google Gemini,
   OpenRouter, LM Studio, ElevenLabs, Addis AI and on-device speech. Stream text,
-  call tools, generate images, speech, video and embeddings, list models.
-version: 0.1.0
+  call tools, build agents with web search, code sandboxes and app
+  integrations, generate images, speech and video, and list models.
+version: 0.2.0
 homepage: https://github.com/dagmawibabi/omni_ai
 repository: https://github.com/dagmawibabi/omni_ai
 issue_tracker: https://github.com/dagmawibabi/omni_ai/issues
@@ -30,6 +31,7 @@ dependencies:
   speech_to_text: ^7.0.0
   record: ^7.0.0
   flutter_svg: ^2.0.0
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:

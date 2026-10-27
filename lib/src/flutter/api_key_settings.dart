@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../omni_ai.dart';
-import '../providers/provider.dart';
+import '../agents/toolkit.dart';
 
 /// A ready-made settings section: one field per provider to paste a key,
 /// with a link to get one and a check that it works. Keys are saved in
@@ -25,7 +25,8 @@ class ApiKeySettings extends StatelessWidget {
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: ai,
         builder: (context, _) {
-          final list = providers == null ? ai.providers : [for (final id in providers!) ai.provider(id)];
+          final all = ai.services;
+          final list = providers == null ? all : [for (final id in providers!) ...all.where((s) => s.id == id)];
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [for (final p in list) ApiKeyField(ai: ai, provider: p, onOpenUrl: onOpenUrl)],
@@ -38,7 +39,7 @@ class ApiKeySettings extends StatelessWidget {
 class ApiKeyField extends StatefulWidget {
   const ApiKeyField({super.key, required this.ai, required this.provider, this.onOpenUrl});
   final OmniAI ai;
-  final AiProvider provider;
+  final KeyedService provider;
   final void Function(String url)? onOpenUrl;
 
   @override

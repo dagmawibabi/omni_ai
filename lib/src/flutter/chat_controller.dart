@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../agents/agent.dart';
+import '../agents/toolkit.dart';
 import '../core/cancel.dart';
 import '../core/errors.dart';
 import '../core/media.dart';
@@ -60,6 +62,12 @@ class ToolActivity {
   Object? output;
   bool done;
   bool isError;
+
+  /// Waiting for a person to allow it.
+  bool awaitingApproval = false;
+
+  /// What a subagent has written so far, for `agent_*` tools.
+  String progress = '';
 }
 
 /// State for a chat screen, like the AI SDK's `useChat`: keeps messages,
@@ -76,14 +84,22 @@ class AiChatController extends ChangeNotifier {
     this.model,
     this.system,
     this.tools = const [],
-    this.maxSteps = 8,
+    this.toolkits = const [],
+    this.maxSteps = 12,
     this.reasoning,
     this.temperature,
     this.outputImages = false,
     this.onToolApproval,
     this.onFinish,
+    this.agent,
     List<Message>? history,
   }) : _history = [...?history];
+
+  /// Chat with an [Agent] instead: its instructions, tools, toolkits,
+  /// skills, memory and helpers are used, and [model], [system] and
+  /// [tools] here are ignored.
+  final Agent? agent;
+  AgentSession? _session;
 
   final OmniAI ai;
 
@@ -91,6 +107,9 @@ class AiChatController extends ChangeNotifier {
   String? model;
   String? system;
   List<Tool> tools;
+
+  /// Toolkits for the chat, e.g. `ai.allToolkits`.
+  List<Toolkit> toolkits;
   int maxSteps;
   ReasoningEffort? reasoning;
   double? temperature;
@@ -172,20 +191,38 @@ class AiChatController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = ai.streamText(
-        model: model,
-        system: system,
-        messages: List.of(_history),
-        tools: tools,
-        maxSteps: maxSteps,
-        reasoning: reasoning,
-        temperature: temperature,
-        outputImages: outputImages,
-        onToolApproval: onToolApproval,
-        cancelToken: token,
-      );
+      final ({Stream<StreamPart> fullStream, Future<List<Message>> responseMessages}) result;
+      if (agent != null) {
+        final s = _session ??= agent!.session();
+        s.history
+          ..clear()
+          ..addAll(_history);
+        final run = s.respond(cancelToken: token);
+        result = (fullStream: run.fullStream, responseMessages: run.responseMessages);
+      } else {
+        final run = ai.streamText(
+          model: model,
+          system: system,
+          messages: List.of(_history),
+          tools: tools,
+          toolkits: toolkits,
+          maxSteps: maxSteps,
+          reasoning: reasoning,
+          temperature: temperature,
+          outputImages: outputImages,
+          onToolApproval: onToolApproval,
+          cancelToken: token,
+        );
+        result = (fullStream: run.fullStream, responseMessages: run.responseMessages);
+      }
       await for (final part in result.fullStream) {
         switch (part) {
+          case ToolApprovalRequest(:final call):
+            reply.tools.where((t) => t.id == call.id).firstOrNull?.awaitingApproval = true;
+          case ToolApprovalResponse(:final call):
+            reply.tools.where((t) => t.id == call.id).firstOrNull?.awaitingApproval = false;
+          case SubagentUpdate(:final agent, part: TextDelta(:final text)):
+            reply.tools.where((t) => t.name == 'agent_$agent' && !t.done).lastOrNull?.progress += text;
           case TextDelta(:final text):
             reply.text += text;
           case ReasoningDelta(:final text):
@@ -241,7 +278,8 @@ extension OmniAIChat on OmniAI {
     String? model,
     String? system,
     List<Tool> tools = const [],
-    int maxSteps = 8,
+    List<Toolkit> toolkits = const [],
+    int maxSteps = 12,
     ReasoningEffort? reasoning,
     bool outputImages = false,
     ToolApproval? onToolApproval,
@@ -252,10 +290,16 @@ extension OmniAIChat on OmniAI {
         model: model,
         system: system,
         tools: tools,
+        toolkits: toolkits,
         maxSteps: maxSteps,
         reasoning: reasoning,
         outputImages: outputImages,
         onToolApproval: onToolApproval,
         history: history,
       );
+}
+
+extension AgentChat on Agent {
+  /// A chat controller that talks to this agent (for [AiChatView]).
+  AiChatController chat({List<Message>? history}) => AiChatController(ai: ai, agent: this, history: history);
 }

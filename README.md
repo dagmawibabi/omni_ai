@@ -1,6 +1,6 @@
 # omni_ai
 
-**One easy Flutter API for every AI provider.** Chat, stream, call tools, make images, speech, video and embeddings, list models with prices, pick voices with previews, and dictate — with the same few calls, whichever provider you use.
+**One easy Flutter API for every AI provider.** Chat, stream, call tools, build agents, make images, speech, video and embeddings, list models with prices, pick voices with previews, and dictate — with the same few calls, whichever provider you use.
 
 | Provider | Chat & tools | Images | Speech | Dictation | Video | Embeddings | Model list |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -11,9 +11,16 @@
 | **ElevenLabs** (`elevenlabs`) | | | ✅ + streaming | ✅ Scribe | | | ✅ voices with previews |
 | **Addis AI** (`addis`) — Amharic, Afaan Oromo, Tigrinya | ✅ | | ✅ | ✅ | | | ✅ voices |
 | **This device** (`device`) — offline, free | | | ✅ | ✅ live | | | ✅ voices |
+| **Cloudflare Workers AI** (`workersai`) — open models on Cloudflare | ✅ | | | | | ✅ | ✅ |
 | **Any OpenAI-compatible API** (OpenAI, Groq, Ollama, Together…) | ✅ | ✅ | ✅ | ✅ | | ✅ | ✅ |
 
-Plus: **[models.dev](https://models.dev)** metadata for every model (prices, context, modalities, release dates, logos), ready-made **widgets** (chat screen, model picker, voice picker, API key settings, dictation button), and a client for **Vercel AI SDK backends** (`useChat` for Flutter).
+Plus:
+
+- An **[agent builder](#agents)** (modelled on [eve](https://eve.dev)) with skills, memory, helper agents, approvals, limits and hooks.
+- Ready-made **[toolkits](#toolkits)** for agents *and* plain calls: **Exa** web search, **E2B** code sandboxes, **Composio** apps (Gmail, Slack, GitHub, Calendar…), **Cloudflare** (a real browser, DNS, Workers, KV, R2), basic tools, and **[two kinds of memory](#memory)** (teleai-style facts, and a file memory in the format of Claude's native memory tool).
+- **[models.dev](https://models.dev)** metadata for every model (prices, context, modalities, release dates, logos).
+- Ready-made **widgets**: chat screen, model picker, voice picker with previews, API key settings (providers and toolkits), dictation button, tool approval and question dialogs.
+- A client for **Vercel AI SDK backends** (`useChat` for Flutter).
 
 The API follows the [Vercel AI SDK](https://ai-sdk.dev): `generateText`, `streamText`, tools with multi-step loops, `generateObject`, `generateImage`, `generateSpeech`, `transcribe`, `embed`.
 
@@ -84,6 +91,16 @@ A whole chat screen, with streaming, tools, thinking and dictation, in one line:
 Scaffold(body: AiChatView(controller: ai.chat(model: 'gateway:anthropic/claude-sonnet-4.5')));
 ```
 
+An agent that searches the web, runs code, remembers you and asks before acting:
+
+```dart
+final agent = ai.agent(
+  instructions: 'You are a careful research assistant.',
+  onToolApproval: (call) => showToolApprovalDialog(context, call),
+);
+Scaffold(body: AiChatView(controller: agent.chat()));
+```
+
 ## Model ids
 
 Every call takes a `model` string: **`provider:model`**.
@@ -95,20 +112,24 @@ Every call takes a `model` string: **`provider:model`**.
 'lmstudio:qwen/qwen3-8b'            // a model loaded in LM Studio
 'elevenlabs:eleven_v3'              // speech
 'addis:addis-chat'                  // Amharic / Afaan Oromo chat
+'workersai:@cf/meta/llama-3.3-70b-instruct-fp8-fast'   // after ai.register(CloudflareWorkersAiProvider(...))
 ```
 
 Leave `model` out and omni_ai uses `ai.defaultModels[type]`, or the default of the first provider you set up a key for.
 
 ## API keys
 
-Pass keys in code, or let people paste them in your app. Keys set with `setApiKey` are stored in the platform keychain (`flutter_secure_storage`) and loaded on the next launch.
+Pass keys in code, or let people paste them in your app. Keys set with `setApiKey` are stored in the platform keychain (`flutter_secure_storage`) and loaded on the next launch. Provider ids and toolkit ids work the same way.
 
 ```dart
+final ai = OmniAI(gatewayKey: '...', exaKey: '...', e2bKey: '...', composioKey: 'ak_...', cloudflareToken: '...');
+
 await ai.setApiKey('elevenlabs', 'sk_...');
-final problem = await ai.verifyKey('elevenlabs');  // null = works
+await ai.setApiKey('exa', '...');                  // toolkits too: exa, e2b, composio, cloudflare
+final problem = await ai.verifyKey('exa');         // null = works
 ```
 
-Drop-in settings section (a field per provider, show/hide, check button, "Get a key" link):
+Drop-in settings section (a field per provider and toolkit, show/hide, check button, "Get a key" link):
 
 ```dart
 ListView(children: [ApiKeySettings(ai: ai, onOpenUrl: (url) => launchUrlString(url))]);
@@ -116,7 +137,7 @@ ListView(children: [ApiKeySettings(ai: ai, onOpenUrl: (url) => launchUrlString(u
 
 > **Security:** a key inside a shipped app can be extracted. For apps you publish, keep keys on your server — e.g. build your backend with the Vercel AI SDK and talk to it with [`UiMessageStreamClient`](#vercel-ai-sdk-backends-usechat-for-flutter) — or let each user bring their own key.
 
-Where to get keys: [Vercel AI Gateway](https://vercel.com/ai-gateway) · [Google AI Studio](https://aistudio.google.com/apikey) · [OpenRouter](https://openrouter.ai/settings/keys) · [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) · [Addis AI](https://platform.addisassistant.com) · LM Studio needs no key.
+Where to get keys: [Vercel AI Gateway](https://vercel.com/ai-gateway) · [Google AI Studio](https://aistudio.google.com/apikey) · [OpenRouter](https://openrouter.ai/settings/keys) · [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) · [Addis AI](https://platform.addisassistant.com) · [Exa](https://dashboard.exa.ai/api-keys) · [E2B](https://e2b.dev/dashboard?tab=keys) · [Composio](https://platform.composio.dev) · [Cloudflare](https://dash.cloudflare.com/profile/api-tokens) · LM Studio and memory need no key.
 
 ## Text
 
@@ -193,9 +214,9 @@ final s = ai.streamText(prompt: 'Long essay', cancelToken: token);
 token.cancel();                                     // stops the request; works on every call
 ```
 
-## Tools and agents
+## Tools
 
-Give the model functions. omni_ai runs them and sends the results back until the model answers (up to `maxSteps`, default 8 when tools are given).
+Give the model functions. omni_ai runs them and sends the results back until the model answers (up to `maxSteps`, default 12 when tools or toolkits are given).
 
 ```dart
 final weather = Tool(
@@ -217,14 +238,181 @@ final r = await ai.generateText(
 print(r.text);
 ```
 
-- **Ask first** — `Tool(needsApproval: true, ...)` and `onToolApproval: (call) => showConfirmDialog(call)`.
+- **Ask first** — `Tool(approval: ApprovalPolicy.always, ...)` (or `.once`, or `ApprovalPolicy.when((input) => ...)`) and `onToolApproval: (call) => showToolApprovalDialog(context, call)`.
+- **Hand files to the app** — return `ToolOutput(value, files: [...])`; the files arrive as `FileOutput` parts and show in the chat.
 - **Run tools yourself** — leave out `execute`; the loop stops and the calls are in `r.toolCalls`. Send results back with `Message.toolResults([...])`.
 - **Force a tool** — `toolChoice: ToolChoice.tool('get_weather')`, or `ToolChoice.required` / `.none`.
 - **Stop early** — `stopWhen: (step) => step.toolCalls.any((c) => c.name == 'finish')`.
 - **Keep the conversation** — add `r.responseMessages` to your history.
-- Errors thrown by `execute` are sent to the model as `{error: ...}` so it can recover.
+- Errors thrown by `execute`, refused approvals, and calls to tools that don't exist go back to the model as `{error: ...}` so it can recover.
+- Tools that need approval are refused when no `onToolApproval` is given.
 
 Works the same on the Gateway, OpenRouter, Google (native function calling, thought signatures handled), LM Studio and any OpenAI-compatible API.
+
+### Toolkits on any call
+
+Every [toolkit](#toolkits) (web search, code sandbox, apps, Cloudflare, memory) works on plain calls and chats too, not only agents:
+
+```dart
+await ai.ask('What changed in the latest Flutter release?', toolkits: [ai.exa]);
+
+ai.generateText(prompt: 'Plot y = x² from -5 to 5', toolkits: [ai.e2b]);   // the chart arrives as a FileOutput
+
+ai.chat(model: 'google:gemini-2.5-flash', toolkits: ai.allToolkits);       // basic tools + memory + every toolkit with a key
+```
+
+## Agents
+
+An agent is instructions + a model + tools, run in a loop until the job is done. The design follows [eve](https://eve.dev): typed tools with approval policies, skills loaded on demand, memory, and helper agents the agent can delegate to.
+
+```dart
+final agent = ai.agent(
+  instructions: 'You are a research assistant. Cite every source.',
+  model: 'gateway:anthropic/claude-sonnet-4.5',
+  // Without `toolkits:`, it gets ai.allToolkits: basic tools, memory, and every toolkit you set a key for.
+  toolkits: [BasicToolkit(), ai.exa, ai.e2b],
+  onToolApproval: (call) => showToolApprovalDialog(context, call),
+);
+
+print(await agent.ask('Compare the three most popular Flutter state libraries, with a chart of pub.dev likes.'));
+```
+
+Put it on screen — streaming, tool activity, approvals and helper progress included:
+
+```dart
+Scaffold(body: AiChatView(controller: agent.chat()));
+```
+
+Or stream it yourself:
+
+```dart
+final session = agent.session();                    // keeps history, "once" approvals and helper threads
+final run = session.send('Find this week’s Flutter news');
+await for (final part in run.fullStream) {
+  switch (part) {
+    case TextDelta(:final text):              print(text);
+    case ToolCall(:final call):               print('→ ${call.name}');
+    case ToolApprovalRequest(:final call):    print('waiting for OK: ${call.name}');
+    case SubagentUpdate(:final agent, :final part): print('[$agent] $part');
+    case FileOutput(:final file):             showImage(file.bytes);   // e.g. a chart from the sandbox
+    default:
+  }
+}
+final saved = session.toJson();                     // restore with AgentSession.fromJson(agent, saved)
+```
+
+More on runs and sessions:
+
+```dart
+final run = agent.run('One-off task');              // no history
+run.cancel();                                       // stop it
+final r = await run.result;                         // text, steps, tool calls, usage
+
+session.respond();                                  // answer again on the history as it stands
+session.submitToolResults([...]);                   // continue after tools without `execute` that you ran yourself
+print(session.usage);                               // tokens and cost over the whole session
+await agent.dispose();                              // shut down sandboxes the toolkits opened
+```
+
+You can also build an `Agent` directly, without `OmniAI`, from a typed model: `Agent(name: 'a', languageModel: GoogleProvider(apiKey: '...').languageModel('gemini-2.5-flash'), toolkits: [...])`.
+
+### Toolkits
+
+Set keys once (`ai.setApiKey('exa', ...)`, or the `ApiKeySettings` widget, which now lists toolkits too):
+
+| Toolkit | Tools the agent gets | Key |
+|---|---|---|
+| `BasicToolkit()` | `current_time`, `calculate`, `fetch_url` | none |
+| `ai.memory` / `AgentMemory` | `remember`, `update_memory`, `forget_memory`, `list_memories` | none |
+| `ai.memoryFiles` / `MemoryFilesToolkit` | `memory` (view/create/str_replace/insert/delete/rename under /memories) | none |
+| `ai.exa` / `ExaToolkit` | `web_search` (categories, domains, dates), `read_pages`, `find_similar_pages`, `web_answer` (with citations) | [Exa](https://dashboard.exa.ai/api-keys) |
+| `ai.e2b` / `E2BToolkit` | `run_code` (Python, JS, bash, R, Java; charts come back as images), `run_command`, `sandbox_write_file`, `sandbox_read_file`, `sandbox_list_files` — one sandbox kept alive per toolkit | [E2B](https://e2b.dev/dashboard?tab=keys) |
+| `ai.composio` / `ComposioToolkit` | `list_connected_apps`, `connect_app` (sign-in link), `find_app_actions`, `run_app_action`, plus any actions you name (`actions: ['GMAIL_SEND_EMAIL']`) as typed tools | [Composio](https://platform.composio.dev) project key (`ak_…`) |
+| `ai.cloudflare` / `CloudflareToolkit` | `browse_page` (real browser → Markdown), `screenshot_page`, zones, DNS read/write, cache purge, Workers, KV, R2 files and share links, and a raw `cloudflare_api` call | [API token](https://dash.cloudflare.com/profile/api-tokens) |
+
+```dart
+ai.composio.userId = currentUser.id;                // whose Gmail/Slack the agent uses
+ComposioToolkit(apiKey: '...', apps: ['gmail', 'googlecalendar'], onConnectLink: (app, url) => launchUrlString(url));
+
+await ai.setCloudflareAccount(accountId: '...', r2: R2Credentials(accountId: '...', accessKeyId: '...', secretAccessKey: '...'));
+E2BToolkit(apiKey: '...', approval: ApprovalPolicy.once);   // ask before the first run in a session
+```
+
+Changes are guarded by default: Cloudflare writes and Composio actions that send, create or delete ask for approval (reads don't). Without an `onToolApproval`, guarded tools are refused and the model is told so. Call `agent.dispose()` to shut down the E2B sandbox.
+
+Write your own toolkit by extending `Toolkit`, and register it with `ai.registerToolkit(...)` so its key is saved and shown in `ApiKeySettings`:
+
+```dart
+class WeatherToolkit extends Toolkit {
+  WeatherToolkit({this.apiKey});
+  String? apiKey;
+
+  @override String get id => 'weather';
+  @override String get name => 'Weather';
+  @override bool get isConfigured => apiKey != null;
+  @override String get instructions => 'Use get_weather for weather questions.';
+  @override Future<String?> verify() async => null;
+
+  @override
+  Future<List<Tool>> tools() async => [
+    Tool(name: 'get_weather', description: 'Weather for a city', parameters: Schema.object({'city': Schema.string()}),
+        execute: (i) => fetchWeather(i['city'], apiKey!)),
+  ];
+}
+```
+ Cloudflare's models are also available as a provider: `ai.register(CloudflareWorkersAiProvider(token: ..., accountId: ...))`, then `model: 'workersai:@cf/meta/llama-3.3-70b-instruct-fp8-fast'`.
+
+### Skills
+
+Procedures the agent loads only when a task calls for them — their names and descriptions sit in the prompt, the body is read with `load_skill`. `Skill.parse` reads the `SKILL.md` format:
+
+```dart
+skills: [
+  Skill(name: 'release_notes', description: 'Use when asked for release notes.', content: '1. List merged PRs…'),
+  Skill.parse('data_analysis', await rootBundle.loadString('assets/skills/data_analysis/SKILL.md')),
+]
+```
+
+### Memory
+
+Two kinds, both on the device by default and both usable by agents, chats and plain calls:
+
+**Facts** (`ai.memory` / `AgentMemory`), the way teleai does it: every memory is in the prompt as `id: content`, and the AI keeps them with `remember` (content + tags), `update_memory`, `forget_memory` and `list_memories`. Nothing is saved unless it decides to.
+
+```dart
+ai.memory.scope = currentUser.id;                   // whose memories
+ai.chat(toolkits: [ai.memory]);                     // or agent(memory: AgentMemory(scope: ..., store: MyDbStore()))
+final remembered = await ai.memory.all();           // for a "what I remember" screen
+```
+
+**Files** (`ai.memoryFiles` / `MemoryFilesToolkit`): one `memory` tool with the commands of Claude's native memory tool — `view`, `create`, `str_replace`, `insert`, `delete`, `rename` — over files under `/memories`. The AI reads them when it needs them, so it suits longer notes (project progress, decisions). Claude models know this tool well; other models use it like any tool. Paths outside `/memories` are refused.
+
+```dart
+final agent = ai.agent(toolkits: [...ai.allToolkits, ai.memoryFiles]);
+```
+
+Store either anywhere by implementing `MemoryStore` / `MemoryFileStore`.
+
+### Helper agents
+
+```dart
+final researcher = ai.agent(name: 'researcher', description: 'Researches a question on the web.', toolkits: [ai.exa]);
+final coder = ai.agent(name: 'coder', description: 'Writes and runs code to answer data questions.', toolkits: [ai.e2b]);
+final lead = ai.agent(name: 'lead', instructions: 'Plan, delegate, then write the final answer.', subagents: [researcher, coder]);
+```
+
+Each helper becomes a tool (`agent_researcher`) that takes a self-contained `message` and returns its answer plus a `task_id` to continue that thread. Its progress streams into the parent as `SubagentUpdate` parts.
+
+### Limits, hooks and questions
+
+```dart
+limits: const AgentLimits(maxSteps: 25, maxTokens: 200000, maxCostUsd: 1.5, timeout: Duration(minutes: 5), maxHistoryMessages: 60),
+hooks: AgentHooks(
+  beforeToolCall: (call) => cache[call.name],       // return a value to skip the tool
+  afterToolCall: (call, result) => null,            // or a replacement result
+),
+onAskUser: (question, options) => showAskUserDialog(context, question, options),   // adds an ask_user tool
+```
 
 ## Structured output
 
@@ -458,10 +646,12 @@ final e = await embedMany(model: ..., values: [...]);
 | `embed`, `embedMany`, `cosineSimilarity` | same |
 | `useChat` | `AiChatController` / `AiChatView`, or `UiMessageStreamClient` for AI SDK servers |
 | `AbortSignal` | `CancelToken` |
+| `tool({ needsApproval })` | `Tool(approval: ApprovalPolicy.always / .once / .when(...))` |
+| `Agent` | `Agent` / `ai.agent()` (plus eve-style skills, memory, helper agents, limits, hooks) |
 
 ## Example app
 
-[`example/`](example) has chat with tools, images, voices with previews and dictation, video, and a keys screen:
+[`example/`](example) has a chat with tools and every toolkit you add a key for, an agent (with a skill, memory and a research helper), images, voices with previews and dictation, video, and a keys screen for providers and toolkits:
 
 ```bash
 cd example && flutter run

@@ -173,10 +173,9 @@ class OpenAICompatibleProvider extends AiProvider {
       };
     }
     if (p.isAudio && p.bytes != null) {
-      final fmt = GeneratedFile.extensionFor(p.mediaType);
       return {
         'type': 'input_audio',
-        'input_audio': {'data': p.base64, 'format': fmt == 'bin' ? 'wav' : fmt},
+        'input_audio': {'data': p.base64, 'format': inputAudioFormat(p.mediaType, filename: p.filename)},
       };
     }
     return {
@@ -384,6 +383,36 @@ class OpenAIChatModel implements LanguageModel {
 }
 
 class _RetryPlain implements Exception {}
+
+/// The `input_audio.format` name for a clip: `wav`, `mp3`, `ogg`, `flac`,
+/// `aac`, `webm`. Voice notes from messengers (Opus in Ogg, `.oga`) and
+/// phone recordings (`.m4a`) are common; the file name decides when the
+/// media type is vague.
+String inputAudioFormat(String mediaType, {String? filename}) {
+  final ext = filename == null || !filename.contains('.') ? '' : filename.split('.').last.toLowerCase();
+  switch (mediaType.toLowerCase()) {
+    case 'audio/mpeg' || 'audio/mp3':
+      return 'mp3';
+    case 'audio/wav' || 'audio/x-wav' || 'audio/wave':
+      return 'wav';
+    case 'audio/ogg' || 'audio/opus':
+      return 'ogg';
+    case 'audio/flac' || 'audio/x-flac':
+      return 'flac';
+    case 'audio/aac' || 'audio/mp4' || 'audio/x-m4a' || 'audio/m4a':
+      return 'aac';
+    case 'audio/webm':
+      return 'webm';
+  }
+  return switch (ext) {
+    'mp3' => 'mp3',
+    'ogg' || 'oga' || 'opus' => 'ogg',
+    'flac' => 'flac',
+    'm4a' || 'aac' || 'mp4' => 'aac',
+    'webm' => 'webm',
+    _ => 'wav',
+  };
+}
 
 /// Tool arguments as a map, tolerating empty or broken JSON.
 Map<String, dynamic> parseToolArgs(String raw) {

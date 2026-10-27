@@ -129,11 +129,21 @@ class ToolCallPart extends Part {
 
 /// What a tool returned.
 class ToolResultPart extends Part {
-  const ToolResultPart({required this.toolCallId, required this.toolName, required this.output, this.isError = false});
+  const ToolResultPart({
+    required this.toolCallId,
+    required this.toolName,
+    required this.output,
+    this.isError = false,
+    this.files = const [],
+  });
   final String toolCallId;
   final String toolName;
   final Object? output;
   final bool isError;
+
+  /// Files the tool made for the app (charts, downloads). Not sent to the
+  /// model and not saved with the message.
+  final List<GeneratedFile> files;
 
   /// [output] as text for providers that take a string.
   String get outputText => output is String ? output as String : jsonEncode(output);

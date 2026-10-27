@@ -100,6 +100,14 @@ class ModelInfo {
   bool get isFree => modelId.endsWith(':free') || (inputPrice == 0 && outputPrice == 0);
   bool supports(ModelType t) => types.contains(t) || (t == ModelType.image && makesImages);
 
+  /// A batch-only or otherwise special listing of another model (e.g.
+  /// `…-batch`), which most pickers should hide.
+  bool get isVariant => modelId.endsWith('-batch') || modelId.endsWith(':batch') || (inputPrice ?? 0) < 0;
+
+  /// One number to sort by price: input weighted 3:1 over output, the way a
+  /// chat with long context spends it. Unknown prices sort last.
+  double get blendedPrice => (inputPrice ?? 999) * 0.75 + (outputPrice ?? 999) * 0.25;
+
   /// The lab's logo, from models.dev.
   String get logoUrl => 'https://models.dev/logos/${lab ?? provider}.svg';
 
@@ -123,10 +131,12 @@ class ModelInfo {
     return '${(c / 1000).round()}K';
   }
 
-  /// Estimated USD for a call with these token counts.
-  double? estimateCost(int input, int output) {
+  /// Estimated USD for a call with these token counts. [cachedInput] (part
+  /// of [input]) is priced at the cache-read price when there is one.
+  double? estimateCost(int input, int output, {int cachedInput = 0}) {
     if (inputPrice == null && outputPrice == null) return null;
-    return (input * (inputPrice ?? 0) + output * (outputPrice ?? 0)) / 1e6;
+    final cached = cachedInput.clamp(0, input);
+    return ((input - cached) * (inputPrice ?? 0) + cached * (cacheReadPrice ?? inputPrice ?? 0) + output * (outputPrice ?? 0)) / 1e6;
   }
 
   ModelInfo copyWith({

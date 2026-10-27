@@ -17,14 +17,22 @@ import 'provider.dart';
 /// Model ids look like `openai/gpt-5`, `anthropic/claude-sonnet-4.5`,
 /// `google/gemini-2.5-flash`. Get a key at https://vercel.com/ai-gateway.
 class VercelGatewayProvider extends OpenAICompatibleProvider {
+  /// [appName] and [appUrl] attribute requests to your app in the
+  /// gateway's dashboard.
   VercelGatewayProvider({
     super.apiKey,
     this.promptCaching = true,
+    String? appName,
+    String? appUrl,
     super.httpClient,
   }) : super(
           id: 'gateway',
           name: 'Vercel AI Gateway',
           baseUrl: 'https://ai-gateway.vercel.sh/v1',
+          headers: {
+            if (appUrl != null) 'http-referer': appUrl,
+            if (appName != null) 'x-title': appName,
+          },
           supportedTypes: const {
             ModelType.text,
             ModelType.image,

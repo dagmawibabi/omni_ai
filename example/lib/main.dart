@@ -32,6 +32,7 @@ class _HomeState extends State<Home> {
 
   static const _pages = <(String, IconData, Widget)>[
     ('Chat', Icons.chat_bubble_outline, ChatPage()),
+    ('Agent', Icons.smart_toy_outlined, AgentPage()),
     ('Images', Icons.image_outlined, ImagePage()),
     ('Voice', Icons.record_voice_over_outlined, VoicePage()),
     ('Video', Icons.movie_outlined, VideoPage()),
@@ -68,6 +69,105 @@ class ModelButton extends StatelessWidget {
   );
 }
 
+// ---------------------------------------------------------------- agent
+
+/// An agent with every toolkit you've added a key for (Exa web search, an
+/// E2B sandbox, Composio apps, Cloudflare), a skill, memory and a helper.
+class AgentPage extends StatefulWidget {
+  const AgentPage({super.key});
+  @override
+  State<AgentPage> createState() => _AgentPageState();
+}
+
+class _AgentPageState extends State<AgentPage> {
+  AiChatController? _chat;
+  String? _model;
+
+  AiChatController _build() {
+    final researcher = ai.agent(
+      name: 'researcher',
+      description: 'Researches a question on the web and reports findings with sources.',
+      instructions: 'You research thoroughly and cite every source URL.',
+      model: _model,
+      toolkits: [BasicToolkit(), if (ai.exa.isConfigured) ai.exa],
+    );
+    final agent = ai.agent(
+      name: 'assistant',
+      instructions:
+          'You are a capable assistant. Plan, use your tools, and check your work. '
+          'Ask before doing anything you cannot undo.',
+      model: _model,
+      skills: [
+        Skill(
+          name: 'data_analysis',
+          description: 'Use when the user gives data to analyze or asks for a chart.',
+          content:
+              '1. Load the data in the sandbox with pandas.\n2. Summarize it (shape, columns, key stats).\n'
+              '3. Make one clear matplotlib chart and plt.show().\n4. Explain what it shows in three sentences.',
+        ),
+      ],
+      memory: AgentMemory(scope: 'example-user'),
+      subagents: [researcher],
+      onToolApproval: (call) => showToolApprovalDialog(context, call),
+      onAskUser: (q, options) => showAskUserDialog(context, q, options),
+      limits: const AgentLimits(maxSteps: 20, maxCostUsd: 0.5),
+    );
+    return agent.chat();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chat = _chat ??= _build();
+    final kits = [for (final t in ai.configuredToolkits) t.name];
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(8),
+          child: Row(
+            children: [
+              Expanded(
+                child: ModelButton(
+                  type: ModelType.text,
+                  value: _model,
+                  onChanged: (m) => setState(() {
+                    _model = m;
+                    _chat = null;
+                  }),
+                ),
+              ),
+              IconButton(tooltip: 'New agent chat', onPressed: () => setState(() => _chat = null), icon: const Icon(Icons.refresh)),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            kits.isEmpty
+                ? 'Add Exa, E2B, Composio or Cloudflare keys on the Keys tab to give the agent more tools.'
+                : 'Toolkits: ${kits.join(', ')}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        Expanded(
+          child: AiChatView(
+            key: ObjectKey(chat),
+            controller: chat,
+            emptyState: const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Try "Research the latest Flutter release and chart its download growth", or "Remember that I prefer short answers".',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 // ---------------------------------------------------------------- chat
 
 class ChatPage extends StatefulWidget {
@@ -93,7 +193,14 @@ class _ChatPageState extends State<ChatPage> {
   );
 
   @override
-  Widget build(BuildContext context) => Column(
+  Widget build(BuildContext context) {
+    // Every toolkit with a key (web search, sandbox, apps, Cloudflare) plus
+    // memory, picked up again whenever this rebuilds.
+    chat.toolkits = ai.allToolkits;
+    return _body();
+  }
+
+  Widget _body() => Column(
     children: [
       Padding(
         padding: const EdgeInsets.all(8),
@@ -109,7 +216,7 @@ class _ChatPageState extends State<ChatPage> {
       Expanded(
         child: AiChatView(
           controller: chat,
-          emptyState: const Center(child: Text('Ask anything. Try "roll two dice" to see tools.')),
+          emptyState: const Center(child: Text('Ask anything. Try "roll two dice", "remember I like jazz", or a web question.')),
         ),
       ),
     ],
@@ -357,7 +464,7 @@ class KeysPage extends StatelessWidget {
     children: [
       const Padding(
         padding: EdgeInsets.symmetric(horizontal: 16),
-        child: Text('Paste a key for any provider you use. Keys stay on this device.'),
+        child: Text('Paste a key for any provider or toolkit you use. Keys stay on this device.'),
       ),
       ApiKeySettings(ai: ai),
     ],

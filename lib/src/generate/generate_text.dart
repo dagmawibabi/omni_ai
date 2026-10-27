@@ -9,6 +9,7 @@ import '../core/models.dart';
 import '../core/stream_parts.dart';
 import '../core/tools.dart';
 import '../core/usage.dart';
+import '../agents/toolkit.dart';
 import 'replay_stream.dart';
 
 /// Asks before a tool marked `needsApproval` runs. Return false to refuse.
@@ -126,6 +127,7 @@ StreamTextResult streamText({
   List<FilePart> files = const [],
   List<Message>? messages,
   List<Tool> tools = const [],
+  List<Toolkit> toolkits = const [],
   ToolChoice? toolChoice,
   int maxSteps = 1,
   bool Function(StepResult step)? stopWhen,
@@ -148,13 +150,32 @@ StreamTextResult streamText({
 }) {
   final parts = ReplayStream<StreamPart>();
   final history = buildMessages(system: system, prompt: prompt, messages: messages, files: files);
-  final toolMap = {for (final t in tools) t.name: t};
-
   Future<GenerateTextResult> run() async {
     final steps = <StepResult>[];
     final added = <Message>[];
     final sources = <SourceOutput>[];
     var convo = List<Message>.of(history);
+
+    // Toolkits add their tools and a line (or their memories) to the prompt.
+    final allTools = <Tool>[...tools];
+    final guidance = <String>[];
+    for (final t in toolkits.where((t) => t.isConfigured || !t.needsApiKey)) {
+      for (final tool in await t.tools()) {
+        if (!allTools.any((x) => x.name == tool.name)) allTools.add(tool);
+      }
+      final g = await t.prompt();
+      if (g != null) guidance.add('- $g');
+    }
+    if (guidance.isNotEmpty) {
+      final extra = '# Tools\n${guidance.join('\n')}';
+      final i = convo.indexWhere((m) => m.role == Role.system);
+      if (i < 0) {
+        convo.insert(0, Message.system(extra));
+      } else {
+        convo[i] = Message.system('${convo[i].text}\n\n$extra');
+      }
+    }
+    final toolMap = {for (final t in allTools) t.name: t};
     for (var step = 0; step < maxSteps; step++) {
       if (cancelToken?.isCancelled ?? false) throw const AiCancelledException();
       parts.add(StepStart(step));
@@ -166,7 +187,7 @@ StreamTextResult streamText({
 
       final request = LanguageModelRequest(
         messages: convo,
-        tools: tools,
+        tools: allTools,
         toolChoice: toolChoice,
         temperature: temperature,
         topP: topP,
@@ -219,19 +240,30 @@ StreamTextResult streamText({
 
       // Run the tools the model called.
       final results = <ToolResultPart>[];
-      final runnable = calls.isNotEmpty && calls.every((c) => toolMap[c.name]?.execute != null);
+      // Tools without `execute` are the app's to run: stop and hand them over.
+      final clientSide = calls.any((c) => toolMap[c.name] != null && toolMap[c.name]!.execute == null);
+      final runnable = calls.isNotEmpty && !clientSide;
       if (runnable) {
         results.addAll(await Future.wait([
-          for (final c in calls) _runTool(toolMap[c.name]!, c, onToolApproval),
+          for (final c in calls)
+            toolMap[c.name] == null
+                // An unknown name goes back as an error the model can fix.
+                ? Future.value(ToolResultPart(
+                    toolCallId: c.id,
+                    toolName: c.name,
+                    output: {'error': 'There is no tool "${c.name}". Available: ${toolMap.keys.join(', ')}.'},
+                    isError: true,
+                  ))
+                : _runTool(toolMap[c.name]!, c, onToolApproval),
         ]));
         for (final r in results) {
+          for (final f in r.files) {
+            stepFiles.add(f);
+            parts.add(FileOutput(f));
+          }
           parts.add(ToolResult(r));
         }
         stepMessages.add(Message.toolResults(results));
-      } else {
-        for (final c in calls.where((c) => !toolMap.containsKey(c.name))) {
-          parts.add(StreamError(AiException('The model called an unknown tool "${c.name}".')));
-        }
       }
 
       final result = StepResult(
@@ -288,6 +320,7 @@ Future<GenerateTextResult> generateText({
   List<FilePart> files = const [],
   List<Message>? messages,
   List<Tool> tools = const [],
+  List<Toolkit> toolkits = const [],
   ToolChoice? toolChoice,
   int maxSteps = 1,
   bool Function(StepResult step)? stopWhen,
@@ -313,6 +346,7 @@ Future<GenerateTextResult> generateText({
       files: files,
       messages: messages,
       tools: tools,
+      toolkits: toolkits,
       toolChoice: toolChoice,
       maxSteps: maxSteps,
       stopWhen: stopWhen,
@@ -333,7 +367,7 @@ Future<GenerateTextResult> generateText({
     ).result;
 
 Future<ToolResultPart> _runTool(Tool tool, ToolCallPart call, ToolApproval? approve) async {
-  if (tool.needsApproval) {
+  if (tool.approval.requires(call.input)) {
     final ok = approve == null ? false : await approve(call);
     if (!ok) {
       return ToolResultPart(
@@ -345,10 +379,15 @@ Future<ToolResultPart> _runTool(Tool tool, ToolCallPart call, ToolApproval? appr
     }
   }
   try {
-    final out = await tool.execute!(call.input);
+    var out = await tool.execute!(call.input);
+    var files = const <GeneratedFile>[];
+    if (out is ToolOutput) {
+      files = out.files;
+      out = out.value;
+    }
     // Make sure the output can be sent back as JSON.
     final safe = out == null || out is String || out is num || out is bool ? out : jsonDecode(jsonEncode(out));
-    return ToolResultPart(toolCallId: call.id, toolName: call.name, output: safe);
+    return ToolResultPart(toolCallId: call.id, toolName: call.name, output: safe, files: files);
   } catch (e) {
     return ToolResultPart(
       toolCallId: call.id,

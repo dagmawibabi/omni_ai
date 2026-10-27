@@ -3,6 +3,11 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'agents/agent.dart';
+import 'agents/memory.dart';
+import 'agents/memory_files.dart';
+import 'agents/skills.dart';
+import 'agents/toolkit.dart';
 import 'catalog/catalog.dart';
 import 'catalog/model_info.dart';
 import 'core/cancel.dart';
@@ -27,6 +32,10 @@ import 'providers/openai_compatible.dart';
 import 'providers/openrouter.dart';
 import 'providers/provider.dart';
 import 'providers/vercel_gateway.dart';
+import 'toolkits/cloudflare.dart';
+import 'toolkits/composio.dart';
+import 'toolkits/e2b.dart';
+import 'toolkits/exa.dart';
 
 /// The one object you need. Holds your keys and providers, and does
 /// everything with a model id string like `google:gemini-2.5-flash`.
@@ -51,6 +60,11 @@ class OmniAI extends ChangeNotifier {
     String? elevenLabsKey,
     String? addisKey,
     String? lmStudioUrl,
+    String? exaKey,
+    String? e2bKey,
+    String? composioKey,
+    String composioUserId = 'default',
+    String? cloudflareToken,
     this.defaultProvider = 'gateway',
     KeyStore? keyStore,
     bool loadSavedKeys = true,
@@ -58,7 +72,7 @@ class OmniAI extends ChangeNotifier {
     String? appUrl,
     http.Client? httpClient,
   }) : keyStore = keyStore ?? SecureKeyStore() {
-    gateway = VercelGatewayProvider(apiKey: gatewayKey, httpClient: httpClient);
+    gateway = VercelGatewayProvider(apiKey: gatewayKey, appName: appName, appUrl: appUrl, httpClient: httpClient);
     google = GoogleProvider(apiKey: googleKey, httpClient: httpClient);
     openRouter = OpenRouterProvider(apiKey: openRouterKey, appName: appName, appUrl: appUrl, httpClient: httpClient);
     lmStudio = LmStudioProvider(serverUrl: lmStudioUrl ?? 'http://localhost:1234', httpClient: httpClient);
@@ -67,6 +81,13 @@ class OmniAI extends ChangeNotifier {
     for (final p in [gateway, google, openRouter, lmStudio, elevenLabs, addis]) {
       _providers[p.id] = p;
     }
+    exa = ExaToolkit(apiKey: exaKey, httpClient: httpClient);
+    e2b = E2BToolkit(apiKey: e2bKey, httpClient: httpClient);
+    composio = ComposioToolkit(apiKey: composioKey, userId: composioUserId, httpClient: httpClient);
+    cloudflare = CloudflareToolkit(token: cloudflareToken, httpClient: httpClient);
+    for (final t in [exa, e2b, composio, cloudflare, memory, memoryFiles]) {
+      _toolkits[t.id] = t;
+    }
     _given = {
       if (gatewayKey != null) 'gateway',
       if (googleKey != null) 'google',
@@ -74,6 +95,10 @@ class OmniAI extends ChangeNotifier {
       if (elevenLabsKey != null) 'elevenlabs',
       if (addisKey != null) 'addis',
       if (lmStudioUrl != null) 'lmstudio',
+      if (exaKey != null) 'exa',
+      if (e2bKey != null) 'e2b',
+      if (composioKey != null) 'composio',
+      if (cloudflareToken != null) 'cloudflare',
     };
     if (loadSavedKeys) _keysLoaded = loadKeys();
   }
@@ -91,6 +116,11 @@ class OmniAI extends ChangeNotifier {
     String? elevenLabsKey,
     String? addisKey,
     String? lmStudioUrl,
+    String? exaKey,
+    String? e2bKey,
+    String? composioKey,
+    String composioUserId = 'default',
+    String? cloudflareToken,
     String defaultProvider = 'gateway',
     KeyStore? keyStore,
     bool loadSavedKeys = true,
@@ -104,6 +134,11 @@ class OmniAI extends ChangeNotifier {
         elevenLabsKey: elevenLabsKey,
         addisKey: addisKey,
         lmStudioUrl: lmStudioUrl,
+        exaKey: exaKey,
+        e2bKey: e2bKey,
+        composioKey: composioKey,
+        composioUserId: composioUserId,
+        cloudflareToken: cloudflareToken,
         defaultProvider: defaultProvider,
         keyStore: keyStore,
         loadSavedKeys: loadSavedKeys,
@@ -118,10 +153,36 @@ class OmniAI extends ChangeNotifier {
   late final ElevenLabsProvider elevenLabs;
   late final AddisAiProvider addis;
 
+  /// Web search for agents.
+  late final ExaToolkit exa;
+
+  /// A cloud code sandbox for agents.
+  late final E2BToolkit e2b;
+
+  /// Your users' apps (Gmail, Slack, GitHub…) for agents.
+  late final ComposioToolkit composio;
+
+  /// Cloudflare (DNS, Workers, KV, R2, browser) for agents.
+  late final CloudflareToolkit cloudflare;
+
+  /// Long-term memory (teleai-style `remember` / `update_memory` /
+  /// `forget_memory` / `list_memories`), on the device. Set
+  /// `ai.memory.scope` to your user's id.
+  final memory = AgentMemory();
+
+  /// A `memory` tool in the format of Claude's native memory tool (files
+  /// under /memories), on the device.
+  final memoryFiles = MemoryFilesToolkit();
+
+  /// The basic tools, memory, and every toolkit with a key set: what to
+  /// pass as `toolkits:` to give a call or chat everything.
+  List<Toolkit> get allToolkits => [BasicToolkit(), ...configuredToolkits.where((t) => t != memoryFiles)];
+
   /// Provider for ids with no `provider:` prefix.
   String defaultProvider;
   final KeyStore keyStore;
   final _providers = <String, AiProvider>{};
+  final _toolkits = <String, Toolkit>{};
   late final Set<String> _given;
   Future<void>? _keysLoaded;
 
@@ -143,6 +204,60 @@ class OmniAI extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Every registered toolkit.
+  List<Toolkit> get toolkits => List.unmodifiable(_toolkits.values);
+
+  /// Toolkits with a key set (or needing none).
+  List<Toolkit> get configuredToolkits => toolkits.where((t) => t.isConfigured || !t.needsApiKey).toList();
+
+  Toolkit toolkit(String id) => _toolkits[id] ?? (throw UnknownModelException('No toolkit "$id". Known: ${_toolkits.keys.join(', ')}'));
+
+  /// Adds a toolkit so its key can be set and saved like the built-in ones.
+  void registerToolkit(Toolkit t) {
+    _toolkits[t.id] = t;
+    notifyListeners();
+  }
+
+  /// Every provider and toolkit that takes a key, for settings screens.
+  List<KeyedService> get services => [...providers, ...toolkits.where((t) => t.needsApiKey)];
+
+  /// An agent on this [OmniAI]. With no [toolkits] given, it gets
+  /// [allToolkits]: the basic tools, memory, and every toolkit you've set a
+  /// key for.
+  Agent agent({
+    String name = 'assistant',
+    String? description,
+    String instructions = 'You are a helpful assistant.',
+    String? model,
+    List<Tool> tools = const [],
+    List<Toolkit>? toolkits,
+    List<Skill> skills = const [],
+    AgentMemory? memory,
+    List<Agent> subagents = const [],
+    AgentLimits limits = const AgentLimits(),
+    AgentHooks hooks = const AgentHooks(),
+    ReasoningEffort? reasoning,
+    gen.ToolApproval? onToolApproval,
+    AskUser? onAskUser,
+  }) =>
+      Agent(
+        ai: this,
+        name: name,
+        description: description,
+        instructions: instructions,
+        model: model,
+        tools: tools,
+        toolkits: toolkits ?? allToolkits,
+        skills: skills,
+        memory: memory,
+        subagents: subagents,
+        limits: limits,
+        hooks: hooks,
+        reasoning: reasoning,
+        onToolApproval: onToolApproval,
+        onAskUser: onAskUser,
+      );
+
   // ---------------------------------------------------------------- keys
 
   /// Waits for saved keys to load (they load on creation).
@@ -159,11 +274,25 @@ class OmniAI extends ChangeNotifier {
       final url = await keyStore.read('url.lmstudio');
       if (url != null && url.isNotEmpty) lmStudio.serverUrl = url;
     }
+    for (final t in toolkits) {
+      if (_given.contains(t.id)) continue;
+      final k = await keyStore.read('key.${t.id}');
+      if (k != null && k.isNotEmpty) _setRaw(t.id, k);
+    }
+    final account = await keyStore.read('cloudflare.account');
+    if (account != null && account.isNotEmpty) cloudflare.client.accountId = account;
+    final r2 = await keyStore.read('cloudflare.r2');
+    final f = r2?.split('\n') ?? const [];
+    if (f.length == 3) cloudflare.client.r2 = R2Credentials(accountId: f[0], accessKeyId: f[1], secretAccessKey: f[2]);
     notifyListeners();
   }
 
   /// The key set for [providerId], or null.
-  String? apiKey(String providerId) => switch (_providers[providerId]) {
+  String? apiKey(String providerId) => switch (_providers[providerId] ?? _toolkits[providerId]) {
+        final ExaToolkit t => t.apiKey,
+        final E2BToolkit t => t.apiKey,
+        final ComposioToolkit t => t.apiKey,
+        final CloudflareToolkit t => t.token,
         final GoogleProvider p => p.apiKey,
         final ElevenLabsProvider p => p.apiKey,
         final AddisAiProvider p => p.apiKey,
@@ -174,8 +303,12 @@ class OmniAI extends ChangeNotifier {
 
   /// Sets (and saves, unless [persist] is false) a provider's API key.
   /// For `lmstudio` pass the server address.
+  ///
+  /// Setting the key a provider already has does nothing, so it is cheap to
+  /// call whenever your own settings change.
   Future<void> setApiKey(String providerId, String? key, {bool persist = true}) async {
     final k = key?.trim();
+    if ((apiKey(providerId) ?? '') == (k ?? '')) return;
     _setRaw(providerId, k);
     if (persist) await keyStore.write(providerId == 'lmstudio' ? 'url.lmstudio' : 'key.$providerId', k);
     // Refresh the catalog only if someone has loaded it.
@@ -184,8 +317,16 @@ class OmniAI extends ChangeNotifier {
   }
 
   void _setRaw(String providerId, String? key) {
-    final p = _providers[providerId];
+    final p = _providers[providerId] ?? _toolkits[providerId];
     switch (p) {
+      case ExaToolkit():
+        p.apiKey = key;
+      case E2BToolkit():
+        p.apiKey = key;
+      case ComposioToolkit():
+        p.apiKey = key;
+      case CloudflareToolkit():
+        p.token = key;
       case GoogleProvider():
         p.apiKey = key;
       case ElevenLabsProvider():
@@ -198,13 +339,30 @@ class OmniAI extends ChangeNotifier {
         p.apiKey = key;
       case null:
         throw UnknownModelException('No provider "$providerId".');
-      default:
+      case AiProvider():
         throw UnsupportedFeatureException('${p.name} takes no API key.');
+      default:
+        throw UnsupportedFeatureException('$providerId takes no API key.');
     }
   }
 
   /// Checks a provider's key. Null means it works.
-  Future<String?> verifyKey(String providerId) => provider(providerId).verify();
+  Future<String?> verifyKey(String providerId) =>
+      _providers.containsKey(providerId) ? provider(providerId).verify() : toolkit(providerId).verify();
+
+  /// Sets (and saves) Cloudflare's account id and, optionally, R2 keys for
+  /// the R2 file tools.
+  Future<void> setCloudflareAccount({String? accountId, R2Credentials? r2}) async {
+    if (accountId != null) {
+      cloudflare.client.accountId = accountId;
+      await keyStore.write('cloudflare.account', accountId);
+    }
+    if (r2 != null) {
+      cloudflare.client.r2 = r2;
+      await keyStore.write('cloudflare.r2', [r2.accountId, r2.accessKeyId, r2.secretAccessKey].join('\n'));
+    }
+    notifyListeners();
+  }
 
   /// Providers with a key (or address) set.
   List<AiProvider> get configuredProviders => providers.where((p) => p.isConfigured).toList();
@@ -286,6 +444,7 @@ class OmniAI extends ChangeNotifier {
     List<FilePart> files = const [],
     List<Message>? messages,
     List<Tool> tools = const [],
+    List<Toolkit> toolkits = const [],
     ToolChoice? toolChoice,
     int? maxSteps,
     bool Function(gen.StepResult step)? stopWhen,
@@ -309,8 +468,9 @@ class OmniAI extends ChangeNotifier {
         files: files,
         messages: messages,
         tools: tools,
+        toolkits: toolkits,
         toolChoice: toolChoice,
-        maxSteps: maxSteps ?? (tools.isEmpty ? 1 : 8),
+        maxSteps: maxSteps ?? (tools.isEmpty && toolkits.isEmpty ? 1 : 12),
         stopWhen: stopWhen,
         temperature: temperature,
         topP: topP,
@@ -335,6 +495,7 @@ class OmniAI extends ChangeNotifier {
     List<FilePart> files = const [],
     List<Message>? messages,
     List<Tool> tools = const [],
+    List<Toolkit> toolkits = const [],
     ToolChoice? toolChoice,
     int? maxSteps,
     double? temperature,
@@ -353,6 +514,7 @@ class OmniAI extends ChangeNotifier {
         files: files,
         messages: messages,
         tools: tools,
+        toolkits: toolkits,
         toolChoice: toolChoice,
         maxSteps: maxSteps,
         temperature: temperature,
@@ -366,8 +528,9 @@ class OmniAI extends ChangeNotifier {
       ).result;
 
   /// Just the answer, as text.
-  Future<String> ask(String prompt, {String? model, String? system, List<FilePart> files = const []}) async =>
-      (await generateText(model: model, system: system, prompt: prompt, files: files)).text;
+  Future<String> ask(String prompt,
+          {String? model, String? system, List<FilePart> files = const [], List<Toolkit> toolkits = const []}) async =>
+      (await generateText(model: model, system: system, prompt: prompt, files: files, toolkits: toolkits)).text;
 
   /// JSON matching [schema], optionally mapped with [fromJson].
   Future<obj.GenerateObjectResult<T>> generateObject<T>({
@@ -551,5 +714,7 @@ class OmniAI extends ChangeNotifier {
   /// Estimated USD for [usage] on [modelId], from the catalog's prices.
   double? estimateCost(String modelId, Usage usage) =>
       usage.cost ??
-      catalog.byId(modelId.contains(':') ? modelId : '$defaultProvider:$modelId')?.estimateCost(usage.inputTokens, usage.outputTokens);
+      catalog
+          .byId(modelId.contains(':') ? modelId : '$defaultProvider:$modelId')
+          ?.estimateCost(usage.inputTokens, usage.outputTokens, cachedInput: usage.cachedInputTokens);
 }

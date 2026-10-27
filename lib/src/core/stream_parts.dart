@@ -97,6 +97,31 @@ class Finish extends StreamPart {
   final Usage usage;
 }
 
+/// An agent is waiting for a person to allow [call] (emitted by `Agent`).
+class ToolApprovalRequest extends StreamPart {
+  const ToolApprovalRequest(this.call);
+  final ToolCallPart call;
+}
+
+/// A person allowed or refused [call] (emitted by `Agent`).
+class ToolApprovalResponse extends StreamPart {
+  const ToolApprovalResponse(this.call, {required this.approved});
+  final ToolCallPart call;
+  final bool approved;
+}
+
+/// Something a subagent did, relayed to its parent's stream.
+class SubagentUpdate extends StreamPart {
+  const SubagentUpdate({required this.agent, required this.taskId, required this.part});
+
+  /// The subagent's name.
+  final String agent;
+
+  /// Pass back as `task_id` to continue that subagent's conversation.
+  final String taskId;
+  final StreamPart part;
+}
+
 class StreamError extends StreamPart {
   const StreamError(this.error);
   final Object error;

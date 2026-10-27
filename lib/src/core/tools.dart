@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'media.dart';
+
 /// A JSON Schema, built without writing maps by hand.
 ///
 /// ```dart
@@ -42,8 +44,51 @@ class Schema {
       });
 }
 
-/// Runs a tool. Return anything JSON-encodable.
+/// Runs a tool. Return anything JSON-encodable, or a [ToolOutput] to also
+/// hand files (charts, downloads) to the app.
 typedef ToolExecute = FutureOr<Object?> Function(Map<String, dynamic> input);
+
+/// A tool result with files for the app. The model sees [value]; the app
+/// gets [files] as `FileOutput` stream parts.
+class ToolOutput {
+  const ToolOutput(this.value, {this.files = const []});
+  final Object? value;
+  final List<GeneratedFile> files;
+}
+
+/// When a tool must be approved by a person before it runs.
+///
+/// ```dart
+/// Tool(..., approval: ApprovalPolicy.always)                         // every call
+/// Tool(..., approval: ApprovalPolicy.once)                           // first call per session
+/// Tool(..., approval: ApprovalPolicy.when((i) => i['amount'] > 100)) // depends on input
+/// ```
+class ApprovalPolicy {
+  const ApprovalPolicy._(this.kind, [this._when]);
+
+  /// Runs without asking.
+  static const never = ApprovalPolicy._('never');
+
+  /// Asks before every call.
+  static const always = ApprovalPolicy._('always');
+
+  /// Asks before the first call in a session; later calls run.
+  static const once = ApprovalPolicy._('once');
+
+  /// Asks when [test] says so for this input.
+  factory ApprovalPolicy.when(bool Function(Map<String, dynamic> input) test) => ApprovalPolicy._('when', test);
+
+  /// `never`, `always`, `once` or `when`.
+  final String kind;
+  final bool Function(Map<String, dynamic> input)? _when;
+
+  /// Whether this input needs a person's yes (before any `once` memory).
+  bool requires(Map<String, dynamic> input) => switch (kind) {
+        'never' => false,
+        'when' => _when!(input),
+        _ => true,
+      };
+}
 
 /// A function the model may call.
 ///
@@ -56,8 +101,11 @@ class Tool {
     Schema? parameters,
     Map<String, dynamic>? parametersJson,
     this.execute,
-    this.needsApproval = false,
-  }) : parameters = parametersJson ?? parameters?.json ?? const {'type': 'object', 'properties': {}};
+    bool needsApproval = false,
+    ApprovalPolicy? approval,
+    this.label,
+  })  : parameters = parametersJson ?? parameters?.json ?? const {'type': 'object', 'properties': {}},
+        approval = approval ?? (needsApproval ? ApprovalPolicy.always : ApprovalPolicy.never);
 
   final String name;
   final String description;
@@ -66,8 +114,31 @@ class Tool {
   final Map<String, dynamic> parameters;
   final ToolExecute? execute;
 
-  /// Ask `onToolApproval` before running.
-  final bool needsApproval;
+  /// When to ask `onToolApproval` before running.
+  final ApprovalPolicy approval;
+
+  /// What to show people while it runs ("Searching the web").
+  final String? label;
+
+  /// Whether this tool may ask for approval at all.
+  bool get needsApproval => approval.kind != 'never';
+
+  /// A readable name for UIs: [label], or `search_web` → "Search web".
+  String get displayName {
+    if (label != null) return label!;
+    final s = name.replaceAll(RegExp(r'[_\-]+'), ' ').trim();
+    return s.isEmpty ? name : s[0].toUpperCase() + s.substring(1);
+  }
+
+  /// This tool with some fields changed.
+  Tool copyWith({String? name, String? description, ToolExecute? execute, ApprovalPolicy? approval, String? label}) => Tool(
+        name: name ?? this.name,
+        description: description ?? this.description,
+        parametersJson: parameters,
+        execute: execute ?? this.execute,
+        approval: approval ?? this.approval,
+        label: label ?? this.label,
+      );
 
   Map<String, dynamic> toOpenAI() => {
         'type': 'function',

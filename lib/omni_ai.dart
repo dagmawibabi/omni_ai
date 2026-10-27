@@ -35,6 +35,17 @@ export 'src/providers/openrouter.dart';
 export 'src/providers/provider.dart' show AiProvider, parseModelRef;
 export 'src/providers/vercel_gateway.dart' show VercelGatewayProvider;
 
+// Agents and their toolkits.
+export 'src/agents/agent.dart';
+export 'src/agents/memory.dart';
+export 'src/agents/memory_files.dart';
+export 'src/agents/skills.dart';
+export 'src/agents/toolkit.dart';
+export 'src/toolkits/cloudflare.dart';
+export 'src/toolkits/composio.dart';
+export 'src/toolkits/e2b.dart';
+export 'src/toolkits/exa.dart';
+
 // Models catalog and keys.
 export 'src/catalog/catalog.dart';
 export 'src/catalog/model_info.dart';
@@ -45,6 +56,7 @@ export 'src/device/device_speech.dart';
 export 'src/device/dictation.dart';
 
 // Flutter widgets and controllers.
+export 'src/flutter/agent_widgets.dart';
 export 'src/flutter/api_key_settings.dart';
 export 'src/flutter/audio.dart';
 export 'src/flutter/chat_controller.dart';

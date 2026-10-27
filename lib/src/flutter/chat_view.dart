@@ -159,10 +159,15 @@ class _Bubble extends StatelessWidget {
                   ExpansionTile(
                     tilePadding: EdgeInsets.zero,
                     dense: true,
-                    leading: t.done
-                        ? Icon(t.isError ? Icons.error_outline : Icons.check_circle_outline, size: 18)
-                        : const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                    title: Text(t.name, style: theme.textTheme.labelMedium),
+                    leading: t.awaitingApproval
+                        ? const Icon(Icons.pan_tool_outlined, size: 18)
+                        : t.done
+                            ? Icon(t.isError ? Icons.error_outline : Icons.check_circle_outline, size: 18)
+                            : const SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    title: Text(t.awaitingApproval ? '${t.name} · waiting for your OK' : t.name, style: theme.textTheme.labelMedium),
+                    subtitle: t.progress.isEmpty || t.done
+                        ? null
+                        : Text(t.progress, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall),
                     children: [
                       SelectableText(
                         'Input: ${const JsonEncoder.withIndent('  ').convert(t.input ?? {})}'

@@ -237,9 +237,10 @@ class GeminiModel implements LanguageModel {
           case ReasoningPart(:final text, :final providerData) when providerData != null && providerData['thoughtSignature'] != null:
             parts.add({'text': text, 'thought': true, 'thoughtSignature': providerData['thoughtSignature']});
           case ToolCallPart(:final name, :final input, :final providerData):
+            final signature = thoughtSignatureOf(providerData);
             parts.add({
               'functionCall': {'name': name, 'args': input},
-              if (providerData?['thoughtSignature'] != null) 'thoughtSignature': providerData!['thoughtSignature'],
+              if (signature != null) 'thoughtSignature': signature,
             });
           case ToolResultPart(:final toolName, :final output):
             parts.add({
@@ -326,6 +327,20 @@ class GeminiModel implements LanguageModel {
     };
   }
 
+  /// A tool call's thought signature, as Gemini sent it natively or as
+  /// Google's OpenAI-compatible endpoint (and gateways in front of it) sent
+  /// it: `extra_content.google.thought_signature`. History recorded through
+  /// either route keeps working through the other.
+  static String? thoughtSignatureOf(Map<String, dynamic>? providerData) {
+    if (providerData == null) return null;
+    final native = providerData['thoughtSignature'];
+    if (native is String) return native;
+    final extra = providerData['extra_content'];
+    final google = extra is Map ? extra['google'] : null;
+    final sig = google is Map ? google['thought_signature'] : null;
+    return sig is String ? sig : null;
+  }
+
   /// Gemini rejects `$schema` and a few JSON Schema extras.
   static Object? _clean(Object? node) {
     if (node is Map) {
@@ -340,16 +355,44 @@ class GeminiModel implements LanguageModel {
 
   @override
   Stream<StreamPart> stream(LanguageModelRequest r, {CancelToken? cancelToken}) async* {
+    // `await for`, not `yield*`, so the retry below can catch the error.
+    try {
+      await for (final e in _stream(r, cancelToken, plain: false)) {
+        yield e;
+      }
+    } on _RetryPlain {
+      // Some models refuse a thinking setting (e.g. a budget of 0 on a
+      // model that always thinks); ask again and let the model decide.
+      await for (final e in _stream(r, cancelToken, plain: true)) {
+        yield e;
+      }
+    }
+  }
+
+  Stream<StreamPart> _stream(LanguageModelRequest r, CancelToken? cancelToken, {required bool plain}) async* {
+    final json = body(r);
+    if (plain) (json['generationConfig'] as Map?)?.remove('thinkingConfig');
     final req = http.Request('POST', Uri.parse('${p.baseUrl}/models/$modelId:streamGenerateContent?alt=sse'))
       ..headers.addAll({...p.headers(), ...r.headers})
-      ..body = jsonEncode(body(r));
+      ..body = jsonEncode(json);
 
     var usage = const Usage();
     var finish = FinishReason.unknown;
     var hasCalls = false;
+    var wrote = false;
     var n = 0;
     String? reasoningSignature;
-    await for (final data in sseData(p.net.lines(req, cancelToken: cancelToken))) {
+    final Stream<String> events;
+    if (plain || r.reasoning == null) {
+      events = sseData(p.net.lines(req, cancelToken: cancelToken));
+    } else {
+      events = sseData(p.net.lines(req, cancelToken: cancelToken)).handleError(
+        (Object e) => throw _RetryPlain(),
+        test: (e) => !wrote && e is AiException && e.statusCode == 400 && '${e.message}'.toLowerCase().contains('think'),
+      );
+    }
+    await for (final data in events) {
+      wrote = true;
       final Map<String, dynamic> j;
       try {
         j = jsonDecode(data) as Map<String, dynamic>;
@@ -414,6 +457,8 @@ class GeminiModel implements LanguageModel {
     );
   }
 }
+
+class _RetryPlain implements Exception {}
 
 class _GeminiImage implements ImageModel {
   _GeminiImage(this.p, this.modelId);
