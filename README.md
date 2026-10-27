@@ -17,9 +17,9 @@
 Plus:
 
 - An **[agent builder](#agents)** (modelled on [eve](https://eve.dev)) with skills, memory, helper agents, approvals, limits and hooks.
-- Ready-made **[toolkits](#toolkits)** for agents *and* plain calls: **Exa** web search, **E2B** code sandboxes, **Composio** apps (Gmail, Slack, GitHub, Calendar…), **Cloudflare** (a real browser, DNS, Workers, KV, R2), basic tools, and **[two kinds of memory](#memory)** (teleai-style facts, and a file memory in the format of Claude's native memory tool).
+- Ready-made **[toolkits](#toolkits)** for agents *and* plain calls: **Exa** web search, **E2B** cloud sandboxes, an **[on-device sandbox](#on-device-sandbox)** (Python and JavaScript, free), a **[browser you can watch live](#browser)**, **Composio** apps (Gmail, Slack, GitHub, Calendar…), **Cloudflare** (a real browser, DNS, Workers, KV, R2), basic tools, and **[two kinds of memory](#memory)** (teleai-style facts, and a file memory in the format of Claude's native memory tool).
 - **[models.dev](https://models.dev)** metadata for every model (prices, context, modalities, release dates, logos).
-- Ready-made **widgets**: chat screen, model picker, voice picker with previews, API key settings (providers and toolkits), dictation button, tool approval and question dialogs.
+- Ready-made **widgets**: chat screen, model picker, voice picker with previews, API key settings (providers and toolkits), dictation button, tool approval and question dialogs, and a live browser view.
 - A client for **Vercel AI SDK backends** (`useChat` for Flutter).
 
 The API follows the [Vercel AI SDK](https://ai-sdk.dev): `generateText`, `streamText`, tools with multi-step loops, `generateObject`, `generateImage`, `generateSpeech`, `transcribe`, `embed`.
@@ -60,7 +60,7 @@ flutter pub add omni_ai
 <key>com.apple.security.device.audio-input</key><true/>
 ```
 
-Only needed if you use dictation or the device voice. Everything else is plain HTTPS.
+Only needed if you use dictation or the device voice. The on-device sandbox and browser use the system web view (`webview_flutter`) on Android, iOS and macOS and need no setup; on other platforms they are left out of `ai.allToolkits`. Everything else is plain HTTPS.
 </details>
 
 ## Quick start
@@ -325,6 +325,8 @@ Set keys once (`ai.setApiKey('exa', ...)`, or the `ApiKeySettings` widget, which
 | `BasicToolkit()` | `current_time`, `calculate`, `fetch_url` | none |
 | `ai.memory` / `AgentMemory` | `remember`, `update_memory`, `forget_memory`, `list_memories` | none |
 | `ai.memoryFiles` / `MemoryFilesToolkit` | `memory` (view/create/str_replace/insert/delete/rename under /memories) | none |
+| `ai.deviceSandbox` / `DeviceSandboxToolkit` | `run_code_on_device` (Python via Pyodide with numpy, pandas, matplotlib…; JavaScript), files in and out | none (Android, iOS, macOS) |
+| `ai.browser` / `BrowserToolkit` | `browser_open`, `browser_read`, `browser_type`, `browser_click`, `browser_back`, `browser_run_js`, `browser_close` — watch it live with `BrowserView` | none (Android, iOS, macOS) |
 | `ai.exa` / `ExaToolkit` | `web_search` (categories, domains, dates), `read_pages`, `find_similar_pages`, `web_answer` (with citations) | [Exa](https://dashboard.exa.ai/api-keys) |
 | `ai.e2b` / `E2BToolkit` | `run_code` (Python, JS, bash, R, Java; charts come back as images), `run_command`, `sandbox_write_file`, `sandbox_read_file`, `sandbox_list_files` — one sandbox kept alive per toolkit | [E2B](https://e2b.dev/dashboard?tab=keys) |
 | `ai.composio` / `ComposioToolkit` | `list_connected_apps`, `connect_app` (sign-in link), `find_app_actions`, `run_app_action`, plus any actions you name (`actions: ['GMAIL_SEND_EMAIL']`) as typed tools | [Composio](https://platform.composio.dev) project key (`ak_…`) |
@@ -361,6 +363,31 @@ class WeatherToolkit extends Toolkit {
 }
 ```
  Cloudflare's models are also available as a provider: `ai.register(CloudflareWorkersAiProvider(token: ..., accountId: ...))`, then `model: 'workersai:@cf/meta/llama-3.3-70b-instruct-fp8-fast'`.
+
+### On-device sandbox
+
+`ai.deviceSandbox` runs code on the phone itself, in a hidden page cut off from your app: JavaScript straight away, Python through [Pyodide](https://pyodide.org) (downloaded once, about 10 MB, then cached), with numpy, pandas, matplotlib, pillow and more loaded from the code's imports. Free, private, no key. It works like teleai's `run_code`.
+
+```dart
+ai.deviceSandbox.addFile('sales.csv', csvBytes);    // the model can pass it to the code by name
+await ai.ask('Chart monthly totals from sales.csv', toolkits: [ai.deviceSandbox]);
+// Python writes outputs to out/ (plt.savefig('out/chart.png')); they arrive as FileOutput parts.
+```
+
+Use `ai.e2b` instead for heavy work, network access, other languages or `pip install` of anything.
+
+### Browser
+
+`ai.browser` is a real browser the AI drives: one web view that runs pages' JavaScript, so it can use sites that are apps (search boxes, forms, logins). It reads a page as text plus numbered elements, then clicks and types by number. Clicking, submitting and scripts ask for approval by default (`BrowserToolkit(actionApproval: ApprovalPolicy.never)` to change it).
+
+Watch it live, and take over when it needs you (to sign in or solve a check), then hand back:
+
+```dart
+BrowserView(session: ai.browser.session)            // address, what the AI is doing, back / reload / close
+await showBrowser(context, ai.browser.session);     // the same, full screen
+```
+
+`AiChatView` adds a **Watch the browser** button to any reply that used browser tools.
 
 ### Skills
 
@@ -651,7 +678,7 @@ final e = await embedMany(model: ..., values: [...]);
 
 ## Example app
 
-[`example/`](example) has a chat with tools and every toolkit you add a key for, an agent (with a skill, memory and a research helper), images, voices with previews and dictation, video, and a keys screen for providers and toolkits:
+[`example/`](example) has a chat with tools and every toolkit you add a key for, an agent (with a skill, memory and a research helper), a live view of the AI's browser, images, voices with previews and dictation, video, and a keys screen for providers and toolkits:
 
 ```bash
 cd example && flutter run

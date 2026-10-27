@@ -269,7 +269,7 @@ class Agent {
     final all = <Tool>[
       ...tools,
       for (final t in allToolkits)
-        if (t.isConfigured || !t.needsApiKey) ...await t.tools(),
+        if (t.isConfigured) ...await t.tools(),
       ..._builtins(),
       for (final a in subagents) a.asTool(relay: relay, tasks: tasks),
     ];

@@ -33,6 +33,7 @@ class _HomeState extends State<Home> {
   static const _pages = <(String, IconData, Widget)>[
     ('Chat', Icons.chat_bubble_outline, ChatPage()),
     ('Agent', Icons.smart_toy_outlined, AgentPage()),
+    ('Browser', Icons.public, BrowserPage()),
     ('Images', Icons.image_outlined, ImagePage()),
     ('Voice', Icons.record_voice_over_outlined, VoicePage()),
     ('Video', Icons.movie_outlined, VideoPage()),
@@ -166,6 +167,17 @@ class _AgentPageState extends State<AgentPage> {
       ],
     );
   }
+}
+
+// -------------------------------------------------------------- browser
+
+/// The AI's browser, live: ask in Chat or Agent to "open a site and…", then
+/// watch here or take over (sign in) and hand back.
+class BrowserPage extends StatelessWidget {
+  const BrowserPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => BrowserView(session: ai.browser.session);
 }
 
 // ---------------------------------------------------------------- chat

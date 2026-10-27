@@ -159,7 +159,7 @@ StreamTextResult streamText({
     // Toolkits add their tools and a line (or their memories) to the prompt.
     final allTools = <Tool>[...tools];
     final guidance = <String>[];
-    for (final t in toolkits.where((t) => t.isConfigured || !t.needsApiKey)) {
+    for (final t in toolkits.where((t) => t.isConfigured)) {
       for (final tool in await t.tools()) {
         if (!allTools.any((x) => x.name == tool.name)) allTools.add(tool);
       }

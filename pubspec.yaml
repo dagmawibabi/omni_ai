@@ -4,7 +4,7 @@ description: >-
   OpenRouter, LM Studio, ElevenLabs, Addis AI and on-device speech. Stream text,
   call tools, build agents with web search, code sandboxes and app
   integrations, generate images, speech and video, and list models.
-version: 0.2.0
+version: 0.3.0
 homepage: https://github.com/dagmawibabi/omni_ai
 repository: https://github.com/dagmawibabi/omni_ai
 issue_tracker: https://github.com/dagmawibabi/omni_ai/issues
@@ -31,6 +31,7 @@ dependencies:
   speech_to_text: ^7.0.0
   record: ^7.0.0
   flutter_svg: ^2.0.0
+  webview_flutter: ^4.10.0
   crypto: ^3.0.8
 
 dev_dependencies:

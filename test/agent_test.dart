@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -269,8 +270,53 @@ void main() {
 
     test('OmniAI.allToolkits has the basics, memory and keyed toolkits', () async {
       final ai = OmniAI(keyStore: MemoryKeyStore(), loadSavedKeys: false, e2bKey: 'k');
-      expect(ai.allToolkits.map((t) => t.id), ['basic', 'e2b', 'memory']);
+      expect(ai.allToolkits.map((t) => t.id), ['basic', 'e2b', 'memory', 'device_sandbox', 'browser']);
       expect(ai.services.map((s) => s.id), isNot(contains('memory')));
+    });
+  });
+
+  group('On-device sandbox and browser', () {
+    test('are offered only where there is a system web view', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        final ai = OmniAI(keyStore: MemoryKeyStore(), loadSavedKeys: false);
+        expect(ai.allToolkits.map((t) => t.id), isNot(contains('browser')));
+        expect(ai.deviceSandbox.isConfigured, isFalse);
+        expect(() => DeviceSandbox().run(language: 'python', code: '1'), throwsA(isA<UnsupportedError>()));
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+      expect(BrowserToolkit().isConfigured, isTrue, reason: 'tests run as Android');
+    });
+
+    test('browser tools ask before clicks, submits and scripts, not reads or plain typing', () async {
+      final tools = {for (final t in await BrowserToolkit().tools()) t.name: t};
+      expect(
+          tools.keys, ['browser_open', 'browser_read', 'browser_type', 'browser_click', 'browser_back', 'browser_run_js', 'browser_close']);
+      expect(tools['browser_open']!.approval.requires({'url': 'x'}), isFalse);
+      expect(tools['browser_click']!.approval.requires({'element': 1}), isTrue);
+      expect(tools['browser_run_js']!.approval.requires({'code': '1'}), isTrue);
+      expect(tools['browser_type']!.approval.requires({'element': 1, 'text': 'hi'}), isFalse);
+      expect(tools['browser_type']!.approval.requires({'element': 1, 'text': 'hi', 'press_enter': true}), isTrue);
+      final relaxed = {for (final t in await BrowserToolkit(actionApproval: ApprovalPolicy.never).tools()) t.name: t};
+      expect(relaxed['browser_click']!.approval.requires({'element': 1}), isFalse);
+    });
+
+    test('browser reads without a page fail clearly', () async {
+      expect(() => BrowserSession().read(), throwsA(isA<StateError>()));
+      expect(BrowserSession.findSnippets('one two three two', 'two', context: 3), ['…ne two th…', '…ee two']);
+    });
+
+    test('sandbox results are clipped for the model and files go to the app', () async {
+      final run = SandboxRun(output: 'x' * 13000, result: 42, files: [
+        (name: 'chart.png', file: GeneratedFile(Uint8List.fromList([0x89, 0x50, 0x4E, 0x47]), mediaType: 'image/png')),
+      ]);
+      final j = run.toJson();
+      expect(j['result'], 42);
+      expect((j['output'] as String).length, lessThan(12100));
+      expect(j['files'], ['chart.png (4 bytes, shown to the user)']);
+      final kit = DeviceSandboxToolkit()..addFile('data.csv', Uint8List.fromList([1]));
+      expect((await kit.tools()).single.description, contains('Files available: data.csv'));
     });
   });
 
@@ -446,7 +492,7 @@ void main() {
       expect(await store.read('key.exa'), 'exa-key');
       expect(ai.apiKey('exa'), 'exa-key');
       final agent = ai.agent();
-      expect(agent.toolkits.map((t) => t.id), ['basic', 'exa', 'memory']);
+      expect(agent.toolkits.map((t) => t.id), ['basic', 'exa', 'memory', 'device_sandbox', 'browser']);
       expect(ai.services.map((s) => s.id), containsAll(['gateway', 'exa', 'e2b', 'composio', 'cloudflare']));
 
       final ai2 = OmniAI(keyStore: store);

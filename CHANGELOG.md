@@ -1,3 +1,10 @@
+## 0.3.0
+
+- **On-device sandbox**: `DeviceSandboxToolkit` / `ai.deviceSandbox` runs Python (Pyodide) or JavaScript in a hidden web view, with input files and output files/charts. Free, no key.
+- **Browser**: `BrowserToolkit` / `ai.browser`, a real browser the AI drives (open, read, type, click, back, run JS, close), with `BrowserView` / `showBrowser` to watch it live or take over. `AiChatView` shows a "Watch the browser" button.
+- Both are in `ai.allToolkits` on Android, iOS and macOS. New dependency: `webview_flutter`.
+- Toolkits are only offered where `isConfigured` (keyless toolkits included).
+
 ## 0.2.0
 
 - **Agents**, modelled on eve: `Agent` / `ai.agent()` with instructions, tools, toolkits, skills (`SKILL.md`), memory, helper agents, limits, hooks, `ask_user`, and sessions you can save and restore. `agent.chat()` plugs into `AiChatView`.

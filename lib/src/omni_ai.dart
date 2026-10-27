@@ -32,8 +32,10 @@ import 'providers/openai_compatible.dart';
 import 'providers/openrouter.dart';
 import 'providers/provider.dart';
 import 'providers/vercel_gateway.dart';
+import 'toolkits/browser.dart';
 import 'toolkits/cloudflare.dart';
 import 'toolkits/composio.dart';
+import 'toolkits/device_sandbox.dart';
 import 'toolkits/e2b.dart';
 import 'toolkits/exa.dart';
 
@@ -85,7 +87,7 @@ class OmniAI extends ChangeNotifier {
     e2b = E2BToolkit(apiKey: e2bKey, httpClient: httpClient);
     composio = ComposioToolkit(apiKey: composioKey, userId: composioUserId, httpClient: httpClient);
     cloudflare = CloudflareToolkit(token: cloudflareToken, httpClient: httpClient);
-    for (final t in [exa, e2b, composio, cloudflare, memory, memoryFiles]) {
+    for (final t in [exa, e2b, composio, cloudflare, memory, memoryFiles, deviceSandbox, browser]) {
       _toolkits[t.id] = t;
     }
     _given = {
@@ -174,8 +176,17 @@ class OmniAI extends ChangeNotifier {
   /// under /memories), on the device.
   final memoryFiles = MemoryFilesToolkit();
 
-  /// The basic tools, memory, and every toolkit with a key set: what to
-  /// pass as `toolkits:` to give a call or chat everything.
+  /// Runs Python or JavaScript on the device, free and offline after the
+  /// first Python download (Android, iOS, macOS).
+  final deviceSandbox = DeviceSandboxToolkit();
+
+  /// A real browser the AI drives; watch it with
+  /// `BrowserView(session: ai.browser.session)` (Android, iOS, macOS).
+  final browser = BrowserToolkit();
+
+  /// The basic tools, memory, the on-device sandbox and browser (where
+  /// supported), and every toolkit with a key set: what to pass as
+  /// `toolkits:` to give a call or chat everything.
   List<Toolkit> get allToolkits => [BasicToolkit(), ...configuredToolkits.where((t) => t != memoryFiles)];
 
   /// Provider for ids with no `provider:` prefix.
@@ -208,7 +219,7 @@ class OmniAI extends ChangeNotifier {
   List<Toolkit> get toolkits => List.unmodifiable(_toolkits.values);
 
   /// Toolkits with a key set (or needing none).
-  List<Toolkit> get configuredToolkits => toolkits.where((t) => t.isConfigured || !t.needsApiKey).toList();
+  List<Toolkit> get configuredToolkits => toolkits.where((t) => t.isConfigured).toList();
 
   Toolkit toolkit(String id) => _toolkits[id] ?? (throw UnknownModelException('No toolkit "$id". Known: ${_toolkits.keys.join(', ')}'));
 

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../toolkits/browser.dart';
+import 'browser_view.dart';
 import 'chat_controller.dart';
 import 'dictation_button.dart';
 
@@ -13,14 +15,25 @@ import 'dictation_button.dart';
 /// Scaffold(body: AiChatView(controller: ai.chat(model: 'google:gemini-2.5-flash')))
 /// ```
 class AiChatView extends StatefulWidget {
-  const AiChatView(
-      {super.key, required this.controller, this.hint = 'Message', this.emptyState, this.showReasoning = true, this.showTools = true});
+  const AiChatView({
+    super.key,
+    required this.controller,
+    this.hint = 'Message',
+    this.emptyState,
+    this.showReasoning = true,
+    this.showTools = true,
+    this.browser,
+  });
 
   final AiChatController controller;
   final String hint;
   final Widget? emptyState;
   final bool showReasoning;
   final bool showTools;
+
+  /// The browser a "Watch" button opens when the AI uses browser tools.
+  /// Defaults to `controller.ai.browser.session`.
+  final BrowserSession? browser;
 
   @override
   State<AiChatView> createState() => _AiChatViewState();
@@ -76,6 +89,9 @@ class _AiChatViewState extends State<AiChatView> {
                       showReasoning: widget.showReasoning,
                       showTools: widget.showTools,
                       onRetry: i == chat.messages.length - 1 && !chat.messages[i].isUser ? chat.regenerate : null,
+                      onWatchBrowser: chat.messages[i].tools.any((t) => t.name.startsWith('browser_'))
+                          ? () => showBrowser(context, widget.browser ?? chat.ai.browser.session)
+                          : null,
                     ),
                   ),
           ),
@@ -117,11 +133,12 @@ class _AiChatViewState extends State<AiChatView> {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.message, required this.showReasoning, required this.showTools, this.onRetry});
+  const _Bubble({required this.message, required this.showReasoning, required this.showTools, this.onRetry, this.onWatchBrowser});
   final ChatMessage message;
   final bool showReasoning;
   final bool showTools;
   final VoidCallback? onRetry;
+  final VoidCallback? onWatchBrowser;
 
   @override
   Widget build(BuildContext context) {
@@ -183,6 +200,12 @@ class _Bubble extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(g.bytes)),
+                ),
+              if (onWatchBrowser != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                      onPressed: onWatchBrowser, icon: const Icon(Icons.public, size: 18), label: const Text('Watch the browser')),
                 ),
               if (message.error != null) ...[
                 Text(message.error!, style: TextStyle(color: scheme.error)),

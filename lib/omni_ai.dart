@@ -41,8 +41,10 @@ export 'src/agents/memory.dart';
 export 'src/agents/memory_files.dart';
 export 'src/agents/skills.dart';
 export 'src/agents/toolkit.dart';
+export 'src/toolkits/browser.dart';
 export 'src/toolkits/cloudflare.dart';
 export 'src/toolkits/composio.dart';
+export 'src/toolkits/device_sandbox.dart';
 export 'src/toolkits/e2b.dart';
 export 'src/toolkits/exa.dart';
 
@@ -59,6 +61,7 @@ export 'src/device/dictation.dart';
 export 'src/flutter/agent_widgets.dart';
 export 'src/flutter/api_key_settings.dart';
 export 'src/flutter/audio.dart';
+export 'src/flutter/browser_view.dart';
 export 'src/flutter/chat_controller.dart';
 export 'src/flutter/chat_view.dart';
 export 'src/flutter/dictation_button.dart';
