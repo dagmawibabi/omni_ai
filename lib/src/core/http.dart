@@ -64,6 +64,15 @@ class AiHttp {
   }) =>
       _run(cancelToken, (c) => c.delete(url, headers: headers).timeout(timeout));
 
+  /// Sends [request] and waits for the whole body. Use [lines] or [bytes]
+  /// when the answer is a stream.
+  Future<http.Response> sendRequest(
+    http.BaseRequest request, {
+    CancelToken? cancelToken,
+    Duration timeout = const Duration(seconds: 120),
+  }) =>
+      _run(cancelToken, (c) async => http.Response.fromStream(await c.send(request).timeout(timeout)));
+
   Future<http.Response> multipart(
     Uri url, {
     Map<String, String>? headers,

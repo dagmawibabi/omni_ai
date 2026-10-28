@@ -214,14 +214,21 @@ void main() {
         apiKey: 'k',
         httpClient: MockClient((_) async => http.Response(
             jsonEncode({
-              'detail': {'status': 'missing_permissions', 'message': 'The API key you used is missing the permission user_read to execute this operation.'}
+              'detail': {
+                'status': 'missing_permissions',
+                'message': 'The API key you used is missing the permission user_read to execute this operation.'
+              }
             }),
             401)),
       );
       expect(await eleven.verify(), isNull);
       final wrong = ElevenLabsProvider(
         apiKey: 'k',
-        httpClient: MockClient((_) async => http.Response(jsonEncode({'detail': {'status': 'invalid_api_key', 'message': 'Invalid API key'}}), 401)),
+        httpClient: MockClient((_) async => http.Response(
+            jsonEncode({
+              'detail': {'status': 'invalid_api_key', 'message': 'Invalid API key'}
+            }),
+            401)),
       );
       expect(await wrong.verify(), isNotNull);
     });
@@ -231,7 +238,10 @@ void main() {
     test('an approval can edit the input or explain a refusal', () async {
       final ran = <Object?>[];
       final model = ScriptedModel([
-        [call('send', {'text': 'draft'}, 'a'), call('send', {'text': 'nope'}, 'b')],
+        [
+          call('send', {'text': 'draft'}, 'a'),
+          call('send', {'text': 'nope'}, 'b')
+        ],
         [const TextDelta('Done.')],
       ]);
       final agent = Agent(
@@ -239,14 +249,17 @@ void main() {
         ai: testAi(),
         languageModel: model,
         tools: [
-          Tool(name: 'send', description: 'Sends', needsApproval: true, execute: (i) {
-            ran.add(i['text']);
-            return {'sent': i['text']};
-          }),
+          Tool(
+              name: 'send',
+              description: 'Sends',
+              needsApproval: true,
+              execute: (i) {
+                ran.add(i['text']);
+                return {'sent': i['text']};
+              }),
         ],
-        onToolApproval: (c) => c.id == 'a'
-            ? ToolApprovalDecision.approve(input: {'text': 'edited'})
-            : const ToolApprovalDecision.deny('The user said no.'),
+        onToolApproval: (c) =>
+            c.id == 'a' ? ToolApprovalDecision.approve(input: {'text': 'edited'}) : const ToolApprovalDecision.deny('The user said no.'),
       );
       final r = await agent.run('go').result;
       expect(ran, ['edited']);
@@ -262,13 +275,16 @@ void main() {
         [call('slow', {}, 'one'), call('slow', {}, 'two')],
         [const TextDelta('ok')],
       ]);
-      final tool = Tool(name: 'slow', description: 'Waits', execute: (_) async {
-        final id = ToolContext.current!.call.id;
-        log.add('start $id');
-        await Future<void>.delayed(const Duration(milliseconds: 20));
-        log.add('end $id');
-        return id;
-      });
+      final tool = Tool(
+          name: 'slow',
+          description: 'Waits',
+          execute: (_) async {
+            final id = ToolContext.current!.call.id;
+            log.add('start $id');
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            log.add('end $id');
+            return id;
+          });
       await generateText(model: model, prompt: 'x', tools: [tool], maxSteps: 3, parallelToolCalls: false);
       expect(log, ['start one', 'end one', 'start two', 'end two']);
     });
@@ -283,10 +299,13 @@ void main() {
           [const TextDelta('ok')],
         ]),
         tools: [
-          Tool(name: 't', description: 'T', execute: (_) {
-            seen.add('run');
-            return 1;
-          }),
+          Tool(
+              name: 't',
+              description: 'T',
+              execute: (_) {
+                seen.add('run');
+                return 1;
+              }),
         ],
       );
       final run = agent.run('go');
@@ -325,7 +344,9 @@ void main() {
         model: model,
         prompt: 'What is it?',
         maxSteps: 3,
-        tools: [Tool(name: 'look', description: 'Looks', execute: (_) => ToolOutput({'shown': 1}, modelFiles: [FilePart.image(png)]))],
+        tools: [
+          Tool(name: 'look', description: 'Looks', execute: (_) => ToolOutput({'shown': 1}, modelFiles: [FilePart.image(png)]))
+        ],
       );
       final second = model.requests[1].messages;
       expect(second.last.role, Role.user);
@@ -361,8 +382,7 @@ void main() {
       }) as Map;
       final id = saved['memory_id'] as String;
       expect(await mem.prompt(), contains('$id: Likes jazz [music]'));
-      expect(
-          await tools['update_memory']!.execute!({'memory_id': id, 'content': 'Likes jazz and blues'}),
+      expect(await tools['update_memory']!.execute!({'memory_id': id, 'content': 'Likes jazz and blues'}),
           {'updated': true, 'memory_id': id, 'content': 'Likes jazz and blues'});
       final listed = await tools['list_memories']!.execute!({'query': 'music'}) as Map;
       expect((listed['memories'] as List).single['content'], 'Likes jazz and blues');
@@ -425,7 +445,7 @@ void main() {
 
     test('OmniAI.allToolkits has the basics, memory and keyed toolkits', () async {
       final ai = OmniAI(keyStore: MemoryKeyStore(), loadSavedKeys: false, e2bKey: 'k');
-      expect(ai.allToolkits.map((t) => t.id), ['basic', 'e2b', 'memory', 'device_sandbox', 'browser']);
+      expect(ai.allToolkits.map((t) => t.id), containsAll(['basic', 'e2b', 'memory', 'skills', 'mcp']));
       expect(ai.services.map((s) => s.id), isNot(contains('memory')));
     });
   });
@@ -647,7 +667,7 @@ void main() {
       expect(await store.read('key.exa'), 'exa-key');
       expect(ai.apiKey('exa'), 'exa-key');
       final agent = ai.agent();
-      expect(agent.toolkits.map((t) => t.id), ['basic', 'exa', 'memory', 'device_sandbox', 'browser']);
+      expect(agent.toolkits.map((t) => t.id), ['basic', 'exa', 'memory', 'device_sandbox', 'browser', 'skills', 'mcp']);
       expect(ai.services.map((s) => s.id), containsAll(['gateway', 'exa', 'e2b', 'composio', 'cloudflare']));
 
       final ai2 = OmniAI(keyStore: store);

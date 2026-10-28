@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:omni_ai/omni_ai.dart';
 
+import 'jev_page.dart';
+
 /// One OmniAI for the whole app. Keys typed on the Keys tab are saved in
 /// the device keychain and loaded on the next launch.
 final ai = OmniAI(appName: 'omni_ai example');
@@ -30,13 +32,15 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> {
   int _tab = 0;
 
-  static const _pages = <(String, IconData, Widget)>[
+  static final _pages = <(String, IconData, Widget)>[
     ('Chat', Icons.chat_bubble_outline, ChatPage()),
     ('Agent', Icons.smart_toy_outlined, AgentPage()),
     ('Browser', Icons.public, BrowserPage()),
     ('Images', Icons.image_outlined, ImagePage()),
     ('Voice', Icons.record_voice_over_outlined, VoicePage()),
     ('Video', Icons.movie_outlined, VideoPage()),
+    ('Jev', Icons.rule, JevPage(ai: ai)),
+    ('Extensions', Icons.extension_outlined, ExtensionsView(ai: ai)),
     ('Keys', Icons.key_outlined, KeysPage()),
   ];
 
@@ -44,10 +48,13 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: Text(_pages[_tab].$1)),
     body: IndexedStack(index: _tab, children: [for (final p in _pages) p.$3]),
-    bottomNavigationBar: NavigationBar(
+    drawer: NavigationDrawer(
       selectedIndex: _tab,
-      onDestinationSelected: (i) => setState(() => _tab = i),
-      destinations: [for (final p in _pages) NavigationDestination(icon: Icon(p.$2), label: p.$1)],
+      onDestinationSelected: (i) {
+        setState(() => _tab = i);
+        Navigator.pop(context);
+      },
+      children: [for (final p in _pages) NavigationDrawerDestination(icon: Icon(p.$2), label: Text(p.$1))],
     ),
   );
 }

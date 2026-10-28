@@ -17,9 +17,10 @@
 Plus:
 
 - An **[agent builder](#agents)** (modelled on [eve](https://eve.dev)) with skills, memory, helper agents, approvals, limits and hooks.
-- Ready-made **[toolkits](#toolkits)** for agents *and* plain calls: **Exa** web search, **E2B** cloud sandboxes, an **[on-device sandbox](#on-device-sandbox)** (Python and JavaScript, free), a **[browser you can watch live](#browser)**, **Composio** apps (Gmail, Slack, GitHub, Calendar…), **Cloudflare** (a real browser, DNS, Workers, KV, R2), basic tools, and **[two kinds of memory](#memory)** (teleai-style facts, and a file memory in the format of Claude's native memory tool).
+- Ready-made **[toolkits](#toolkits)** for agents *and* plain calls: **Exa** web search, **E2B** cloud sandboxes, an **[on-device sandbox](#on-device-sandbox)** (Python and JavaScript, free), a **[browser you can watch live](#browser)**, **Composio** apps (Gmail, Slack, GitHub, Calendar…), **Cloudflare** (a real browser, DNS, Workers, KV, R2), **[TypeSafe Jev](#jev)** decisions, **[MCP servers](#mcp)** (install, list, use), basic tools, and **[two kinds of memory](#memory)** (teleai-style facts, and a file memory in the format of Claude's native memory tool).
+- **[Skills](#skills)** you can **search** on skills.sh, **install** (GitHub `owner/repo`, a SKILL.md URL, or markdown), **list**, and **use** (`load_skill`), the way the AI SDK and `npx skills add` do.
 - **[models.dev](https://models.dev)** metadata for every model (prices, context, modalities, release dates, logos).
-- Ready-made **widgets**: chat screen, model picker, voice picker with previews, API key settings (providers and toolkits), dictation button, tool approval and question dialogs, and a live browser view.
+- Ready-made **widgets**: chat screen, model picker, voice picker with previews, API key settings (providers and toolkits), dictation button, tool approval and question dialogs, a live browser view, and **[ExtensionsView](#search-and-management-ui)** for searching and managing skills and MCP servers.
 - A client for **Vercel AI SDK backends** (`useChat` for Flutter).
 
 The API follows the [Vercel AI SDK](https://ai-sdk.dev): `generateText`, `streamText`, tools with multi-step loops, `generateObject`, `generateImage`, `generateSpeech`, `transcribe`, `embed`.
@@ -122,7 +123,7 @@ Leave `model` out and omni_ai uses `ai.defaultModels[type]`, or the default of t
 Pass keys in code, or let people paste them in your app. Keys set with `setApiKey` are stored in the platform keychain (`flutter_secure_storage`) and loaded on the next launch. Provider ids and toolkit ids work the same way.
 
 ```dart
-final ai = OmniAI(gatewayKey: '...', exaKey: '...', e2bKey: '...', composioKey: 'ak_...', cloudflareToken: '...');
+final ai = OmniAI(gatewayKey: '...', exaKey: '...', e2bKey: '...', composioKey: 'ak_...', cloudflareToken: '...', jevKey: 'ts_...');
 
 await ai.setApiKey('elevenlabs', 'sk_...');
 await ai.setApiKey('exa', '...');                  // toolkits too: exa, e2b, composio, cloudflare
@@ -137,7 +138,7 @@ ListView(children: [ApiKeySettings(ai: ai, onOpenUrl: (url) => launchUrlString(u
 
 > **Security:** a key inside a shipped app can be extracted. For apps you publish, keep keys on your server — e.g. build your backend with the Vercel AI SDK and talk to it with [`UiMessageStreamClient`](#vercel-ai-sdk-backends-usechat-for-flutter) — or let each user bring their own key.
 
-Where to get keys: [Vercel AI Gateway](https://vercel.com/ai-gateway) · [Google AI Studio](https://aistudio.google.com/apikey) · [OpenRouter](https://openrouter.ai/settings/keys) · [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) · [Addis AI](https://platform.addisassistant.com) · [Exa](https://dashboard.exa.ai/api-keys) · [E2B](https://e2b.dev/dashboard?tab=keys) · [Composio](https://platform.composio.dev) · [Cloudflare](https://dash.cloudflare.com/profile/api-tokens) · LM Studio and memory need no key.
+Where to get keys: [Vercel AI Gateway](https://vercel.com/ai-gateway) · [Google AI Studio](https://aistudio.google.com/apikey) · [OpenRouter](https://openrouter.ai/settings/keys) · [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) · [Addis AI](https://platform.addisassistant.com) · [Exa](https://dashboard.exa.ai/api-keys) · [E2B](https://e2b.dev/dashboard?tab=keys) · [Composio](https://platform.composio.dev) · [Cloudflare](https://dash.cloudflare.com/profile/api-tokens) · [TypeSafe Jev](https://console.typesafe.ai). LM Studio, memory, skill installation, and public catalog search need no key. Individual MCP servers may require credentials supplied through headers or environment values.
 
 ## Text
 
@@ -335,6 +336,9 @@ Set keys once (`ai.setApiKey('exa', ...)`, or the `ApiKeySettings` widget, which
 | `ai.e2b` / `E2BToolkit` | `run_code` (Python, JS, bash, R, Java; charts come back as images), `run_command`, `sandbox_write_file`, `sandbox_read_file`, `sandbox_list_files` — one sandbox kept alive per toolkit | [E2B](https://e2b.dev/dashboard?tab=keys) |
 | `ai.composio` / `ComposioToolkit` | `list_connected_apps`, `connect_app` (sign-in link), `find_app_actions`, `run_app_action`, plus any actions you name (`actions: ['GMAIL_SEND_EMAIL']`) as typed tools | [Composio](https://platform.composio.dev) project key (`ak_…`) |
 | `ai.cloudflare` / `CloudflareToolkit` | `browse_page` (real browser → Markdown), `screenshot_page`, zones, DNS read/write, cache purge, Workers, KV, R2 files and share links, and a raw `cloudflare_api` call | [API token](https://dash.cloudflare.com/profile/api-tokens) |
+| `ai.jev` / `JevToolkit` | `jev_decide`, `jev_noul`, `jev_choice`, `jev_score`, `jev_box`, `jev_models` — typed decisions with probabilities | [TypeSafe](https://console.typesafe.ai) |
+| `ai.mcp` / `McpRegistry` | Search the official MCP Registry, then `mcp_search` / `mcp_install_catalog` / `mcp_list_servers` / `mcp_call_tool` plus each server's tools | catalog needs no key; server credentials vary; stdio needs a local runtime |
+| `ai.skills` / `SkillRegistry` | Search skills.sh, then `search_skills`, `list_skills`, `load_skill`, `install_skill`, `uninstall_skill`, `read_skill_file` | none |
 
 ```dart
 ai.composio.userId = currentUser.id;                // whose Gmail/Slack the agent uses
@@ -395,7 +399,7 @@ await showBrowser(context, ai.browser.session);     // the same, full screen
 
 ### Skills
 
-Procedures the agent loads only when a task calls for them — their names and descriptions sit in the prompt, the body is read with `load_skill`. `Skill.parse` reads the `SKILL.md` format:
+Procedures the agent loads only when a task calls for them — their names and descriptions sit in the prompt, the body is read with `load_skill`. That is the AI SDK agent-skills pattern (progressive disclosure). `Skill.parse` reads the `SKILL.md` format:
 
 ```dart
 skills: [
@@ -403,6 +407,117 @@ skills: [
   Skill.parse('data_analysis', await rootBundle.loadString('assets/skills/data_analysis/SKILL.md')),
 ]
 ```
+
+Install, list and use skills at runtime (GitHub `owner/repo` like `npx skills add`, a SKILL.md URL, or markdown):
+
+```dart
+await ai.skills.install('owner/repo@pdf-processing');   // or a https://…/SKILL.md URL
+print(await ai.skills.list());                          // name + description
+final agent = ai.agent(skills: ai.skills.use());        // installed skills; load_skill reads the body
+await ai.skills.uninstall('pdf-processing');
+```
+
+Search the public [skills.sh](https://skills.sh) catalog (the same API as `npx skills find`, no key):
+
+```dart
+final hits = await ai.skills.search('react native');    // SkillHit: name, source, installs
+await ai.skills.installHit(hits.first);                 // fetches SKILL.md from GitHub
+```
+
+`ai.skills` is also a toolkit: `search_skills`, `preview_skill`, `list_skills`, `is_skill_installed`, `load_skill`, `read_skill_file`, `install_skill`, and `uninstall_skill`. Installation and removal ask for approval. The same resolved tool list can install a skill, check it, load instructions or references, and remove it during one agent run. Skills are saved on the device and picked up by agents on this `OmniAI`.
+
+GitHub folder URLs and `owner/repo@skill` select only matching skills. YAML frontmatter supports folded and multiline descriptions; bundled text references and scripts are available through `read_skill_file`. Installation stores instructions and files; script execution requires a sandbox toolkit supplied by the host app. Binary assets and provider-hosted skill uploads are not included.
+
+### Jev
+
+[TypeSafe Jev](https://docs.typesafe.ai) is a decision model, not a chat model. You send **state** plus typed **questions**; it returns noul (yes/no probability), choice, score or box answers with calibrated probabilities — the same contract as the Vercel AI SDK `experimental_decide`.
+
+```dart
+final ai = OmniAI(jevKey: 'ts_…');                      // https://console.typesafe.ai
+
+final d = await ai.decide(
+  state: 'I was charged twice. Please refund the extra charge.',
+  questions: {
+    'billing': JevQuestion.noul('Is this about billing?'),
+    'team': JevQuestion.choice('Which team?', {'billing': 'Payments', 'other': 'Anything else'}),
+    'urgency': JevQuestion.score('How urgent?', ['Can wait', 'This week', 'Today']),
+  },
+);
+if (d['billing']!.isTrue(0.8)) routeToBilling();        // your code keeps the threshold
+
+// One-shot helpers
+final angry = await ai.jev.client.noul(message, 'Is the customer angry?');
+```
+
+Full control on the client: pin `jev-1.14.0`, custom `baseUrl` / headers, image assets, `longContext` (262k), `idempotencyKey`, retries on 429/5xx, multipart image upload. Agent tools: `jev_decide` (several questions at once), `jev_noul`, `jev_choice`, `jev_score`, `jev_box`, `jev_models`.
+
+`JevQuestion.boolean` aliases `noul`. Instructions and criteria can contain structured JSON; choices take 1–255 options, scores take 2–10 ordered levels. Box questions require an image and Jev 1.14+. Set `ai.jev.images` to make app-supplied images available to agent decision/box tools. `JevClient` accepts an origin or a base ending in `/v1`, configurable `timeout` / `maxRetries`, and cancellation tokens. This integration calls TypeSafe directly or a TypeSafe-compatible proxy.
+
+```dart
+ai.agent(toolkits: [ai.jev]);                           // or allToolkits once the key is set
+```
+
+### MCP
+
+Connect to [Model Context Protocol](https://modelcontextprotocol.io) servers the way the AI SDK `createMCPClient` does, then **install**, **list** and **use** them.
+
+```dart
+// One-off client (HTTP is the portable default)
+final mcp = await createMcpClient(McpServer.http(
+  'linear',
+  url: 'https://mcp.linear.app/mcp',
+  headers: {'Authorization': 'Bearer …'},
+));
+final tools = await mcp.tools();                        // omni_ai Tool list
+await ai.generateText(prompt: 'List my issues', tools: tools);
+await mcp.close();
+
+// Install on the device, list, use with agents
+await ai.mcp.install(McpServer.http('linear', url: 'https://mcp.linear.app/mcp', headers: {'Authorization': 'Bearer …'}));
+await ai.mcp.install(McpServer.stdio('github', command: 'npx', args: ['-y', '@modelcontextprotocol/server-github'])); // desktop
+print(await ai.mcp.list());
+ai.agent(toolkits: await ai.mcp.toolkits());            // or ai.mcp.asToolkit() for every server at once
+await ai.mcp.uninstall('linear');
+```
+
+Search the [official MCP Registry](https://registry.modelcontextprotocol.io) (no key; query at least 3 characters):
+
+```dart
+final hits = await ai.mcp.search('filesystem');         // McpCatalogHit: name, description, remote or npm/pypi
+await ai.mcp.installHit(hits.first);                    // HTTP remote, or stdio `npx -y …` on desktop
+await ai.mcp.installFromCatalog('io.github.user/weather');
+```
+
+HTTP and legacy SSE are available across platforms, subject to server CORS rules on web. Stdio needs a platform that allows spawning processes and an installed runtime (`npx` / `uvx`); use remote HTTP on mobile and web. Saving a stdio configuration does not download packages: the runtime resolves them when connecting. Catalog configurations retain package versions, arguments, environment defaults, and remote headers. Replace `{placeholders}` and supply required credentials before connecting.
+
+The client supports stateless MCP `2026-07-28` discovery and falls back to legacy initialization. For servers requiring initialization first, use `McpServer(id: 'legacy', url: 'https://example.com/mcp', protocolVersionDiscovery: false)`. It also lists resources and prompts (`listResources`, `readResource`, `listPrompts`, `getPrompt`). OAuth login, elicitation, sampling, and subscriptions are not implemented; supply authorization headers explicitly.
+
+MCP agent tools support the whole lifecycle on demand:
+
+- `mcp_search`: find catalog entries; `mcp_list_servers` and `mcp_is_installed`: check saved installations without connecting.
+- `mcp_install_catalog`: install a registry entry with optional headers/environment; `mcp_install`: save explicit HTTP/SSE/stdio configuration; `mcp_uninstall`: remove configuration and close its client. These changes require approval.
+- `mcp_list_tools`: connect and inspect tool names, descriptions, and input schemas; `mcp_call_tool`: invoke one, including immediately after installation in the same run. Tool invocation requires approval.
+- `mcp_list_resources`, `mcp_read_resource`, `mcp_list_prompts`, `mcp_get_prompt`: discover and use server resources and prompt templates.
+
+For hosts with their own tool permissions, `await ai.mcp.managementTools()` returns these tools without eagerly connecting to servers. Supply them explicitly with `ai.agent(tools: tools, toolkits: [], useInstalledSkills: false)`, alongside the allowed skill/Jev tools. `useInstalledSkills: false` prevents automatic skill tools from bypassing the host's tool switches; explicit `skills:` are still supported.
+
+`ai.mcp.asToolkit()` also connects on demand by default. Use `asToolkit(includeServerTools: true)` or `await ai.mcp.tools()` to eagerly resolve individual server tools when that is useful.
+
+MCP configurations, including headers and environment values, use the device's secure key store by default (`McpRegistry(store: myKeyStore)` overrides it). Existing configurations in preferences migrate on load. Skills use preferences. Both registries support `persist: false`.
+
+### Search and management UI
+
+```dart
+Scaffold(body: ExtensionsView(ai: ai));
+```
+
+`ExtensionsView` searches skills.sh and the official MCP Registry, previews skills and their files, edits MCP configuration JSON, lists installed capabilities, connects to inspect server tools, and removes installations. The example app exposes this under **Extensions**, plus a **Jev** request playground with model, question, image, transport, and retry controls. Open the navigation drawer to switch screens; set the TypeSafe key under **Keys**. Chat and Agent use installed capabilities through `ai.allToolkits`.
+
+Hosts can use `ExtensionsView(ai: ai, mcp: true)` or `mcp: false` in their own MCP/Skills tabs, and supply `toolsSettings` and `installedHint` to embed their permission controls and instructions.
+
+Manual remote setup has fields for server id, transport, endpoint URL, and an optional Authorization header (`Bearer <API key>`). A URL without a scheme uses HTTPS. Advanced JSON remains available for stdio commands, other headers, and protocol options. If a server redirects, the connection error shows the final endpoint to save; authorization is never automatically forwarded to a different host.
+
+Implementation references: [AI SDK TypeSafe decisions](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai), [TypeSafe HTTP API](https://docs.typesafe.ai/api/system-one), [AI SDK MCP](https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools), [AI SDK Agent Skills](https://ai-sdk.dev/cookbook/guides/agent-skills), [MCP Registry API](https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/api/openapi.yaml), and the [skills CLI search source](https://github.com/vercel-labs/skills/blob/main/src/find.ts). Skill search uses the CLI's public `/api/search` endpoint, distinct from skills.sh's authenticated `/api/v1` API; a custom `catalogUrl` can point to your proxy if needed.
 
 ### Memory
 

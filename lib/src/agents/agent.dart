@@ -76,6 +76,7 @@ class Agent {
     this.tools = const [],
     this.toolkits = const [],
     this.skills = const [],
+    this.useInstalledSkills = true,
     this.memory,
     this.subagents = const [],
     this.limits = const AgentLimits(),
@@ -105,6 +106,9 @@ class Agent {
   final List<Tool> tools;
   final List<Toolkit> toolkits;
   final List<Skill> skills;
+
+  /// Hosts managing tool permissions can disable automatic skill exposure.
+  final bool useInstalledSkills;
   final AgentMemory? memory;
 
   /// Helper agents this one can delegate to. Each becomes a tool named
@@ -192,6 +196,7 @@ class Agent {
   /// The system prompt for a run: instructions, toolkit guidance (with
   /// memories), helpers and skills.
   Future<String> systemPrompt() async {
+    await _ai?.skills.load();
     final b = StringBuffer(instructions.trim());
     final guidance = [for (final t in allToolkits) await t.prompt()].whereType<String>();
     if (guidance.isNotEmpty) b.write('\n\n# Tools\n${guidance.map((g) => '- $g').join('\n')}');
@@ -199,26 +204,38 @@ class Agent {
       b.write('\n\n# Helpers\nDelegate with agent_<name> when a helper fits:\n');
       b.write(subagents.map((a) => '- ${a.name}: ${a.description ?? ''}').join('\n'));
     }
-    final listed = skills.where((s) => !s.deferred);
-    if (skills.isNotEmpty) {
+    final listed = _allSkills.where((s) => !s.deferred);
+    if (_allSkills.isNotEmpty) {
       b.write('\n\n# Skills\nWhen a task matches a skill, call load_skill first and follow it.');
       if (listed.isNotEmpty) b.write('\n${listed.map((s) => '- ${s.name}: ${s.description}').join('\n')}');
-      if (listed.length < skills.length) b.write('\nMore skills can be found with find_skills.');
+      if (listed.length < _allSkills.length) b.write('\nMore skills can be found with find_skills.');
     }
     return b.toString();
   }
 
+  /// Skills passed in plus those installed on [ai.skills].
+  List<Skill> get _allSkills {
+    final seen = <String>{};
+    return [
+      for (final s in skills)
+        if (seen.add(s.name)) s,
+      if (_ai != null && useInstalledSkills)
+        for (final s in _ai.skills.all)
+          if (seen.add(s.name)) s,
+    ];
+  }
+
   List<Tool> _builtins() => [
-        if (skills.isNotEmpty) ...[
+        if (_allSkills.isNotEmpty) ...[
           Tool(
             name: 'load_skill',
             label: 'Loading a skill',
             description: 'Loads a skill\'s full instructions.',
             parameters: Schema.object({
-              'name': Schema.enumOf([for (final s in skills) s.name])
+              'name': Schema.enumOf([for (final s in _allSkills) s.name])
             }),
             execute: (i) {
-              final s = skills.where((s) => s.name == i['name']).firstOrNull;
+              final s = _allSkills.where((s) => s.name == i['name']).firstOrNull;
               if (s == null) return {'error': 'No skill "${i['name']}".'};
               return {
                 'skill': s.name,
@@ -227,15 +244,15 @@ class Agent {
               };
             },
           ),
-          if (skills.any((s) => s.files.isNotEmpty))
+          if (_allSkills.any((s) => s.files.isNotEmpty))
             Tool(
               name: 'read_skill_file',
               label: 'Reading a skill file',
               description: 'Reads a reference file that belongs to a skill.',
               parameters: Schema.object({'skill': Schema.string(), 'path': Schema.string()}),
-              execute: (i) => skills.where((s) => s.name == i['skill']).firstOrNull?.files[i['path']] ?? {'error': 'No such file.'},
+              execute: (i) => _allSkills.where((s) => s.name == i['skill']).firstOrNull?.files[i['path']] ?? {'error': 'No such file.'},
             ),
-          if (skills.any((s) => s.deferred))
+          if (_allSkills.any((s) => s.deferred))
             Tool(
               name: 'find_skills',
               label: 'Finding skills',
@@ -245,7 +262,7 @@ class Agent {
                 final q = '${i['query']}'.toLowerCase().split(RegExp(r'\s+'));
                 return {
                   'skills': [
-                    for (final s in skills)
+                    for (final s in _allSkills)
                       if (q.any((w) => '${s.name} ${s.description}'.toLowerCase().contains(w)))
                         {'name': s.name, 'description': s.description},
                   ],
@@ -272,6 +289,7 @@ class Agent {
 
   /// Every tool for a run, with hooks applied.
   Future<List<Tool>> resolveTools({ReplayStream<StreamPart>? relay, Map<String, AgentSession>? tasks}) async {
+    await _ai?.skills.load();
     final all = <Tool>[
       ...tools,
       for (final t in allToolkits)

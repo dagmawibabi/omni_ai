@@ -41,12 +41,14 @@ export 'src/agents/memory.dart';
 export 'src/agents/memory_files.dart';
 export 'src/agents/skills.dart';
 export 'src/agents/toolkit.dart';
+export 'src/mcp/mcp.dart';
 export 'src/toolkits/browser.dart';
 export 'src/toolkits/cloudflare.dart';
 export 'src/toolkits/composio.dart';
 export 'src/toolkits/device_sandbox.dart';
 export 'src/toolkits/e2b.dart';
 export 'src/toolkits/exa.dart';
+export 'src/toolkits/jev.dart';
 
 // Models catalog and keys.
 export 'src/catalog/catalog.dart';
@@ -65,6 +67,7 @@ export 'src/flutter/browser_view.dart';
 export 'src/flutter/chat_controller.dart';
 export 'src/flutter/chat_view.dart';
 export 'src/flutter/dictation_button.dart';
+export 'src/flutter/extensions_view.dart';
 export 'src/flutter/model_picker.dart';
 export 'src/flutter/voice_picker.dart';
 

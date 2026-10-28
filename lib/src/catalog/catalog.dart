@@ -138,6 +138,9 @@ class ModelCatalog extends ChangeNotifier {
   List<ModelInfo> models = const [];
   bool loading = false;
 
+  /// True while [load] or [refresh] is in flight.
+  bool get isLoading => loading || _loading != null;
+
   /// Per-provider errors from the last refresh (e.g. a bad key).
   Map<String, String> errors = const {};
   DateTime? fetchedAt;

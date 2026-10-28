@@ -8,6 +8,7 @@ import 'agents/memory.dart';
 import 'agents/memory_files.dart';
 import 'agents/skills.dart';
 import 'agents/toolkit.dart';
+import 'mcp/mcp.dart';
 import 'catalog/catalog.dart';
 import 'catalog/model_info.dart';
 import 'core/cancel.dart';
@@ -38,6 +39,7 @@ import 'toolkits/composio.dart';
 import 'toolkits/device_sandbox.dart';
 import 'toolkits/e2b.dart';
 import 'toolkits/exa.dart';
+import 'toolkits/jev.dart';
 
 /// The one object you need. Holds your keys and providers, and does
 /// everything with a model id string like `google:gemini-2.5-flash`.
@@ -67,6 +69,7 @@ class OmniAI extends ChangeNotifier {
     String? composioKey,
     String composioUserId = 'default',
     String? cloudflareToken,
+    String? jevKey,
     this.defaultProvider = 'gateway',
     KeyStore? keyStore,
     bool loadSavedKeys = true,
@@ -87,7 +90,10 @@ class OmniAI extends ChangeNotifier {
     e2b = E2BToolkit(apiKey: e2bKey, httpClient: httpClient);
     composio = ComposioToolkit(apiKey: composioKey, userId: composioUserId, httpClient: httpClient);
     cloudflare = CloudflareToolkit(token: cloudflareToken, httpClient: httpClient);
-    for (final t in [exa, e2b, composio, cloudflare, memory, memoryFiles, deviceSandbox, browser]) {
+    jev = JevToolkit(apiKey: jevKey, httpClient: httpClient);
+    skills = SkillRegistry(httpClient: httpClient);
+    mcp = McpRegistry(httpClient: httpClient, store: this.keyStore);
+    for (final t in [exa, e2b, composio, cloudflare, jev, memory, memoryFiles, deviceSandbox, browser]) {
       _toolkits[t.id] = t;
     }
     _given = {
@@ -101,6 +107,7 @@ class OmniAI extends ChangeNotifier {
       if (e2bKey != null) 'e2b',
       if (composioKey != null) 'composio',
       if (cloudflareToken != null) 'cloudflare',
+      if (jevKey != null) 'jev',
     };
     if (loadSavedKeys) _keysLoaded = loadKeys();
   }
@@ -123,6 +130,7 @@ class OmniAI extends ChangeNotifier {
     String? composioKey,
     String composioUserId = 'default',
     String? cloudflareToken,
+    String? jevKey,
     String defaultProvider = 'gateway',
     KeyStore? keyStore,
     bool loadSavedKeys = true,
@@ -141,6 +149,7 @@ class OmniAI extends ChangeNotifier {
         composioKey: composioKey,
         composioUserId: composioUserId,
         cloudflareToken: cloudflareToken,
+        jevKey: jevKey,
         defaultProvider: defaultProvider,
         keyStore: keyStore,
         loadSavedKeys: loadSavedKeys,
@@ -167,6 +176,15 @@ class OmniAI extends ChangeNotifier {
   /// Cloudflare (DNS, Workers, KV, R2, browser) for agents.
   late final CloudflareToolkit cloudflare;
 
+  /// TypeSafe Jev: typed decisions (noul / choice / score / box).
+  late final JevToolkit jev;
+
+  /// Install, list and use Agent Skills (`SKILL.md`).
+  late final SkillRegistry skills;
+
+  /// Install, list and use MCP servers.
+  late final McpRegistry mcp;
+
   /// Long-term memory (teleai-style `remember` / `update_memory` /
   /// `forget_memory` / `list_memories`), on the device. Set
   /// `ai.memory.scope` to your user's id.
@@ -187,7 +205,12 @@ class OmniAI extends ChangeNotifier {
   /// The basic tools, memory, the on-device sandbox and browser (where
   /// supported), and every toolkit with a key set: what to pass as
   /// `toolkits:` to give a call or chat everything.
-  List<Toolkit> get allToolkits => [BasicToolkit(), ...configuredToolkits.where((t) => t != memoryFiles)];
+  List<Toolkit> get allToolkits => [
+        BasicToolkit(),
+        ...configuredToolkits.where((t) => t != memoryFiles && t != skills),
+        skills,
+        mcp.asToolkit(),
+      ];
 
   /// Provider for ids with no `provider:` prefix.
   String defaultProvider;
@@ -243,6 +266,7 @@ class OmniAI extends ChangeNotifier {
     List<Tool> tools = const [],
     List<Toolkit>? toolkits,
     List<Skill> skills = const [],
+    bool useInstalledSkills = true,
     AgentMemory? memory,
     List<Agent> subagents = const [],
     AgentLimits limits = const AgentLimits(),
@@ -263,6 +287,7 @@ class OmniAI extends ChangeNotifier {
         tools: tools,
         toolkits: toolkits ?? allToolkits,
         skills: skills,
+        useInstalledSkills: useInstalledSkills,
         memory: memory,
         subagents: subagents,
         limits: limits,
@@ -273,6 +298,29 @@ class OmniAI extends ChangeNotifier {
         temperature: temperature,
         providerOptions: providerOptions,
         parallelToolCalls: parallelToolCalls,
+      );
+
+  /// TypeSafe Jev: typed questions about [state]. Same contract as the
+  /// AI SDK `experimental_decide` / `experimental_evaluate`.
+  Future<JevDecision> decide({
+    required Object state,
+    required Map<String, JevQuestion> questions,
+    String model = 'jev-latest',
+    Map<String, JevImage> images = const {},
+    bool longContext = false,
+    bool multipart = false,
+    String? idempotencyKey,
+    CancelToken? cancelToken,
+  }) =>
+      jev.client.decide(
+        state: state,
+        questions: questions,
+        model: model,
+        images: images,
+        longContext: longContext,
+        multipart: multipart,
+        idempotencyKey: idempotencyKey,
+        cancelToken: cancelToken,
       );
 
   // ---------------------------------------------------------------- keys
@@ -301,6 +349,8 @@ class OmniAI extends ChangeNotifier {
     final r2 = await keyStore.read('cloudflare.r2');
     final f = r2?.split('\n') ?? const [];
     if (f.length == 3) cloudflare.client.r2 = R2Credentials(accountId: f[0], accessKeyId: f[1], secretAccessKey: f[2]);
+    await skills.load();
+    await mcp.load();
     notifyListeners();
   }
 
@@ -310,6 +360,7 @@ class OmniAI extends ChangeNotifier {
         final E2BToolkit t => t.apiKey,
         final ComposioToolkit t => t.apiKey,
         final CloudflareToolkit t => t.token,
+        final JevToolkit t => t.apiKey,
         final GoogleProvider p => p.apiKey,
         final ElevenLabsProvider p => p.apiKey,
         final AddisAiProvider p => p.apiKey,
@@ -328,8 +379,9 @@ class OmniAI extends ChangeNotifier {
     if ((apiKey(providerId) ?? '') == (k ?? '')) return;
     _setRaw(providerId, k);
     if (persist) await keyStore.write(providerId == 'lmstudio' ? 'url.lmstudio' : 'key.$providerId', k);
-    // Refresh the catalog only if someone has loaded it.
-    if (catalog.fetchedAt != null) unawaited(catalog.refresh());
+    // Refresh the catalog only if someone has loaded it, or is loading it
+    // (a load that began before this key would otherwise miss its models).
+    if (catalog.fetchedAt != null || catalog.isLoading) unawaited(catalog.refresh());
     notifyListeners();
   }
 
@@ -344,6 +396,8 @@ class OmniAI extends ChangeNotifier {
         p.apiKey = key;
       case CloudflareToolkit():
         p.token = key;
+      case JevToolkit():
+        p.apiKey = key;
       case GoogleProvider():
         p.apiKey = key;
       case ElevenLabsProvider():
