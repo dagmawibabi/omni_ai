@@ -255,8 +255,9 @@ void main() {
       contentCalls.clear();
       return withClient((req) async {
         final url = req.url.toString();
-        if (url == '$api/batches/$batchId')
+        if (url == '$api/batches/$batchId') {
           return ok(batch({'status': 'completed', 'output_file_id': 'file_out', 'error_file_id': 'file_err'}));
+        }
         final m = RegExp(r'/files/(\w+)/content$').firstMatch(req.url.path);
         if (m != null) {
           contentCalls.add(req);
