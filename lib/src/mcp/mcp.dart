@@ -259,7 +259,7 @@ abstract class McpJsonRpcSession {
           '_meta': {
             ...?params?['_meta'] as Map?,
             'io.modelcontextprotocol/protocolVersion': protocolVersion,
-            'io.modelcontextprotocol/clientInfo': {'name': 'omni_ai', 'version': '0.5.0'},
+            'io.modelcontextprotocol/clientInfo': {'name': 'omni_ai', 'version': '0.6.0'},
             'io.modelcontextprotocol/clientCapabilities': <String, dynamic>{},
           },
       };
@@ -289,7 +289,7 @@ abstract class McpJsonRpcSession {
     final r = await rpc('initialize', {
       'protocolVersion': '2025-03-26',
       'capabilities': <String, dynamic>{},
-      'clientInfo': {'name': 'omni_ai', 'version': '0.5.0'},
+      'clientInfo': {'name': 'omni_ai', 'version': '0.6.0'},
     });
     protocolVersion = '${r['protocolVersion'] ?? protocolVersion}';
     _serverInfo(r);
