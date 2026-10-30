@@ -11,6 +11,7 @@ import '../core/messages.dart';
 import '../core/models.dart';
 import '../core/stream_parts.dart';
 import '../core/usage.dart';
+import 'addis_batches.dart';
 import 'openai_compatible.dart' show downloadFile;
 import 'provider.dart';
 
@@ -18,7 +19,8 @@ import 'provider.dart';
 /// Tigrinya. Get a key at https://platform.addisassistant.com.
 ///
 /// Chat model id: `addis-chat` (the language is set with [language]).
-/// Speech: pass an Addis voice id from [listVoices].
+/// Speech: pass an Addis voice id from [listVoices]. For many clips at half
+/// the price, see [batches].
 class AddisAiProvider extends AiProvider {
   AddisAiProvider({this.apiKey, this.language = 'am', http.Client? httpClient}) : net = AiHttp(provider: 'Addis AI', client: httpClient);
 
@@ -29,6 +31,12 @@ class AddisAiProvider extends AiProvider {
   /// Reply language: `am` (Amharic), `om` (Afaan Oromo) or `ti` (Tigrinya, voices).
   String language;
   final AiHttp net;
+
+  /// Batch generation: thousands of clips within 24 hours at half the price.
+  late final batches = AddisBatches(this);
+
+  /// Batch input, result and audio files.
+  late final files = AddisFiles(this);
 
   /// Languages Addis voices speak.
   static const voiceLanguages = {'am', 'om', 'ti'};

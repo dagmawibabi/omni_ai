@@ -648,6 +648,34 @@ final voices = await ai.listVoices('addis', language: 'am');
 await ai.speak('እንኳን ደህና መጣህ', model: 'addis:voices-2', voice: voices.first.id);
 ```
 
+**Batches.** Up to 10,000 clips in one go: they run off-peak, finish within 24 hours and cost half the list price (2.5 ETB a generated minute), and only finished requests are billed. The account needs at least one paid top-up.
+
+```dart
+final batch = await ai.addis.batches.createFromRequests(
+  [
+    for (final (i, text) in chapters.indexed)
+      AddisBatchRequest(customId: 'chapter-${i + 1}', text: text, voiceId: 'ti-berhane', language: 'ti'),
+  ],
+  metadata: {'project': 'audiobook'},
+);
+saveForLater(batch.id); // a batch outlives the app; waitFor and results pick it up by id
+
+final done = await ai.addis.batches.waitFor(
+  batch.id,
+  onProgress: (b) => print('${b.counts.finished}/${b.counts.total}'),
+);
+await for (final result in ai.addis.batches.results(done.id)) {
+  if (result.isSucceeded) {
+    final clip = await ai.addis.batches.audio(result); // GeneratedFile
+    save(result.customId, clip.bytes);
+  } else {
+    print('${result.customId}: ${result.error}');
+  }
+}
+```
+
+Also `batches.retrieve`, `list`, `cancel` (queued requests stop; running ones finish and are billed), `requests` (each request's state while the batch runs), and `create` for a JSONL file you uploaded with `files.upload` (up to 100 MB). `files` also has `retrieve`, `delete`, `contentUrl` and `content`. Downloads read Addis's signed link so your API key never reaches the storage host; browsers can't do that, so on web fetch batch files from your server.
+
 ## Dictation (speech to text)
 
 ```dart

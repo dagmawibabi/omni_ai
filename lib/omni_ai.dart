@@ -27,6 +27,7 @@ export 'src/generate/generate_text.dart';
 
 // Providers.
 export 'src/providers/addis_ai.dart';
+export 'src/providers/addis_batches.dart';
 export 'src/providers/elevenlabs.dart';
 export 'src/providers/google.dart';
 export 'src/providers/lm_studio.dart';
