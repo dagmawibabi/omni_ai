@@ -1,3 +1,9 @@
+## 0.6.1
+
+- Fixed: calling `ModelCatalog.load()` when the catalog was already fresh left it marked as loading for good, so `isLoading` stayed true and every later `load` and `refresh()` did nothing, including the refresh that follows `setApiKey`. A newly added key's models then never appeared until the app restarted.
+- Fixed: `refresh()` during a load now does fetch again when that load ends. 0.6.0 listed this but still returned the same load.
+- Raised the minimum `speech_to_text` to 7.4.0 and `flutter_svg` to 2.0.17, the first versions this package compiles against, and shortened the package description.
+
 ## 0.6.0
 
 - **Addis AI**: batch generation. `ai.addis.batches` sends up to 10,000 text to speech requests at once (off-peak, within 24 hours, half price): `createFromRequests`, `create`, `retrieve`, `list` and `requests` (paged streams), `cancel`, `results`, `audio` and `waitFor` (with `onProgress`; rides out dropped connections and busy answers, and resumes by id after a restart). `ai.addis.files` has `upload` (one request up to 25 MB, signed upload up to 100 MB), `retrieve`, `delete`, `contentUrl` and `content`. Requests are checked before upload; creating a batch sends an `Idempotency-Key`, reused across retries, so a retry can't start a second batch; downloads never send the API key to the storage host. Adds a direct dependency on `http_parser`, already used through `http`.

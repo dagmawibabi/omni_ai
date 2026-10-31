@@ -147,6 +147,7 @@ class ModelCatalog extends ChangeNotifier {
   ModelsDev? modelsDev;
 
   Future<void>? _loading;
+  Future<void>? _reloading;
 
   ModelInfo? byId(String id) => models.where((m) => m.id == id || m.modelId == id).firstOrNull;
   List<ModelInfo> ofType(ModelType type) => models.where((m) => m.supports(type)).toList();
@@ -167,15 +168,25 @@ class ModelCatalog extends ChangeNotifier {
   }
 
   /// Loads the cache, then refreshes when it's older than [maxAge].
-  Future<void> load({bool force = false}) => _loading ??= () async {
-        try {
-          if (models.isEmpty) await _readCache();
-          final at = fetchedAt;
-          if (force || models.isEmpty || at == null || DateTime.now().difference(at) > maxAge) await _refresh();
-        } finally {
-          _loading = null;
-        }
-      }();
+  ///
+  /// A call during a load shares it, except a forced one: that fetches again
+  /// when the load ends, since what it needs may have changed since it began.
+  Future<void> load({bool force = false}) {
+    final running = _loading;
+    if (running != null) {
+      if (!force) return running;
+      return _reloading ??= running.whenComplete(() => _reloading = null).then((_) => load(force: true));
+    }
+    // Cleared in whenComplete, which runs after this assignment even when the
+    // load has nothing to do and finishes without waiting on anything.
+    return _loading = _load(force).whenComplete(() => _loading = null);
+  }
+
+  Future<void> _load(bool force) async {
+    if (models.isEmpty) await _readCache();
+    final at = fetchedAt;
+    if (force || models.isEmpty || at == null || DateTime.now().difference(at) > maxAge) await _refresh();
+  }
 
   /// Fetches every configured provider's list again.
   Future<void> refresh() => load(force: true);
