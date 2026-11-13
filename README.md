@@ -7,6 +7,7 @@
 | **Vercel AI Gateway** (`gateway`) — hundreds of models, one key | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ with prices |
 | **Google Gemini** (`google`) | ✅ | ✅ | ✅ 30 voices | ✅ | ✅ | ✅ | ✅ |
 | **OpenRouter** (`openrouter`) — free models too | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ with prices |
+| **OpenCode Zen** (`opencode`) — GPT, Claude, Gemini, GLM, Kimi… pay as you go | ✅ | | | | | | ✅ with prices |
 | **LM Studio** (`lmstudio`) — local, private, free | ✅ | | | | | ✅ | ✅ loaded/unloaded |
 | **ElevenLabs** (`elevenlabs`) | | | ✅ + streaming | ✅ Scribe | | | ✅ voices with previews |
 | **Addis AI** (`addis`) — Amharic, Afaan Oromo, Tigrinya | ✅ | | ✅ | ✅ | | | ✅ voices |
@@ -69,7 +70,7 @@ Only needed if you use dictation or the device voice. The on-device sandbox and 
 ```dart
 import 'package:omni_ai/omni_ai.dart';
 
-final ai = OmniAI(googleKey: 'AIza...');           // or gatewayKey:, openRouterKey:, ...
+final ai = OmniAI(googleKey: 'AIza...');           // or gatewayKey:, openRouterKey:, openCodeKey:, ...
 
 final answer = await ai.ask('Why is the sky blue?');
 print(answer);
@@ -110,6 +111,7 @@ Every call takes a `model` string: **`provider:model`**.
 'gateway:openai/gpt-5'              // Vercel AI Gateway (also the default: 'openai/gpt-5' works)
 'google:gemini-2.5-flash'           // Google AI Studio
 'openrouter:meta-llama/llama-3.3-70b-instruct:free'
+'opencode:claude-sonnet-5-5'        // OpenCode Zen (paid models; its free ones only work in OpenCode)
 'lmstudio:qwen/qwen3-8b'            // a model loaded in LM Studio
 'elevenlabs:eleven_v3'              // speech
 'addis:addis-chat'                  // Amharic / Afaan Oromo chat
@@ -138,7 +140,7 @@ ListView(children: [ApiKeySettings(ai: ai, onOpenUrl: (url) => launchUrlString(u
 
 > **Security:** a key inside a shipped app can be extracted. For apps you publish, keep keys on your server — e.g. build your backend with the Vercel AI SDK and talk to it with [`UiMessageStreamClient`](#vercel-ai-sdk-backends-usechat-for-flutter) — or let each user bring their own key.
 
-Where to get keys: [Vercel AI Gateway](https://vercel.com/ai-gateway) · [Google AI Studio](https://aistudio.google.com/apikey) · [OpenRouter](https://openrouter.ai/settings/keys) · [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) · [Addis AI](https://platform.addisassistant.com) · [Exa](https://dashboard.exa.ai/api-keys) · [E2B](https://e2b.dev/dashboard?tab=keys) · [Composio](https://platform.composio.dev) · [Cloudflare](https://dash.cloudflare.com/profile/api-tokens) · [TypeSafe Jev](https://console.typesafe.ai). LM Studio, memory, skill installation, and public catalog search need no key. Individual MCP servers may require credentials supplied through headers or environment values.
+Where to get keys: [Vercel AI Gateway](https://vercel.com/ai-gateway) · [Google AI Studio](https://aistudio.google.com/apikey) · [OpenRouter](https://openrouter.ai/settings/keys) · [OpenCode Zen](https://opencode.ai/console) · [ElevenLabs](https://elevenlabs.io/app/settings/api-keys) · [Addis AI](https://platform.addisassistant.com) · [Exa](https://dashboard.exa.ai/api-keys) · [E2B](https://e2b.dev/dashboard?tab=keys) · [Composio](https://platform.composio.dev) · [Cloudflare](https://dash.cloudflare.com/profile/api-tokens) · [TypeSafe Jev](https://console.typesafe.ai). LM Studio, memory, skill installation, and public catalog search need no key. Individual MCP servers may require credentials supplied through headers or environment values.
 
 ## Text
 

@@ -32,6 +32,7 @@ export 'src/providers/elevenlabs.dart';
 export 'src/providers/google.dart';
 export 'src/providers/lm_studio.dart';
 export 'src/providers/openai_compatible.dart';
+export 'src/providers/opencode.dart';
 export 'src/providers/openrouter.dart';
 export 'src/providers/provider.dart' show AiProvider, parseModelRef;
 export 'src/providers/vercel_gateway.dart' show VercelGatewayProvider;

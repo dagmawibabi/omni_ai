@@ -30,6 +30,7 @@ import 'providers/elevenlabs.dart';
 import 'providers/google.dart';
 import 'providers/lm_studio.dart';
 import 'providers/openai_compatible.dart';
+import 'providers/opencode.dart';
 import 'providers/openrouter.dart';
 import 'providers/provider.dart';
 import 'providers/vercel_gateway.dart';
@@ -55,12 +56,13 @@ import 'toolkits/jev.dart';
 ///
 /// Model ids are `provider:model`. Providers: `gateway` (Vercel AI
 /// Gateway, the default when there is no prefix), `google`, `openrouter`,
-/// `lmstudio`, `elevenlabs`, `addis`, and any you [register].
+/// `opencode`, `lmstudio`, `elevenlabs`, `addis`, and any you [register].
 class OmniAI extends ChangeNotifier {
   OmniAI({
     String? gatewayKey,
     String? googleKey,
     String? openRouterKey,
+    String? openCodeKey,
     String? elevenLabsKey,
     String? addisKey,
     String? lmStudioUrl,
@@ -80,10 +82,11 @@ class OmniAI extends ChangeNotifier {
     gateway = VercelGatewayProvider(apiKey: gatewayKey, appName: appName, appUrl: appUrl, httpClient: httpClient);
     google = GoogleProvider(apiKey: googleKey, httpClient: httpClient);
     openRouter = OpenRouterProvider(apiKey: openRouterKey, appName: appName, appUrl: appUrl, httpClient: httpClient);
+    openCode = OpenCodeProvider(apiKey: openCodeKey, httpClient: httpClient);
     lmStudio = LmStudioProvider(serverUrl: lmStudioUrl ?? 'http://localhost:1234', httpClient: httpClient);
     elevenLabs = ElevenLabsProvider(apiKey: elevenLabsKey, httpClient: httpClient);
     addis = AddisAiProvider(apiKey: addisKey, httpClient: httpClient);
-    for (final p in [gateway, google, openRouter, lmStudio, elevenLabs, addis]) {
+    for (final p in [gateway, google, openRouter, openCode, lmStudio, elevenLabs, addis]) {
       _providers[p.id] = p;
     }
     exa = ExaToolkit(apiKey: exaKey, httpClient: httpClient);
@@ -100,6 +103,7 @@ class OmniAI extends ChangeNotifier {
       if (gatewayKey != null) 'gateway',
       if (googleKey != null) 'google',
       if (openRouterKey != null) 'openrouter',
+      if (openCodeKey != null) 'opencode',
       if (elevenLabsKey != null) 'elevenlabs',
       if (addisKey != null) 'addis',
       if (lmStudioUrl != null) 'lmstudio',
@@ -122,6 +126,7 @@ class OmniAI extends ChangeNotifier {
     String? gatewayKey,
     String? googleKey,
     String? openRouterKey,
+    String? openCodeKey,
     String? elevenLabsKey,
     String? addisKey,
     String? lmStudioUrl,
@@ -141,6 +146,7 @@ class OmniAI extends ChangeNotifier {
         gatewayKey: gatewayKey,
         googleKey: googleKey,
         openRouterKey: openRouterKey,
+        openCodeKey: openCodeKey,
         elevenLabsKey: elevenLabsKey,
         addisKey: addisKey,
         lmStudioUrl: lmStudioUrl,
@@ -160,6 +166,7 @@ class OmniAI extends ChangeNotifier {
   late final VercelGatewayProvider gateway;
   late final GoogleProvider google;
   late final OpenRouterProvider openRouter;
+  late final OpenCodeProvider openCode;
   late final LmStudioProvider lmStudio;
   late final ElevenLabsProvider elevenLabs;
   late final AddisAiProvider addis;

@@ -1,3 +1,7 @@
+## Unreleased
+
+- **OpenCode Zen** provider (`opencode`, `ai.openCode`, `OmniAI(openCodeKey: …)`): chat, streaming and tools for every Zen text model (GPT, Claude, Gemini, GLM, Kimi, DeepSeek, Qwen…) through its Chat Completions endpoint, which translates for models with another native API. `listModels` returns prices, cache prices, context and output limits, modalities, and reasoning/tool support. Zen's free models answer only the OpenCode app, so they are left out unless `includeFree` is set (and tagged `free`). `verify` reports a missing key, since the model list is public.
+
 ## 0.6.1
 
 - Fixed: calling `ModelCatalog.load()` when the catalog was already fresh left it marked as loading for good, so `isLoading` stayed true and every later `load` and `refresh()` did nothing, including the refresh that follows `setApiKey`. A newly added key's models then never appeared until the app restarted.
