@@ -74,6 +74,7 @@ class Agent {
     this.languageModel,
     OmniAI? ai,
     this.tools = const [],
+    this.moreTools,
     this.toolkits = const [],
     this.skills = const [],
     this.useInstalledSkills = true,
@@ -104,6 +105,11 @@ class Agent {
   final LanguageModel? languageModel;
   final OmniAI? _ai;
   final List<Tool> tools;
+
+  /// Tools that can join a run while it goes, checked before each step:
+  /// for apps that load tools on demand (a "load tools" tool adds them).
+  /// Hooks apply to them as to [tools].
+  final List<Tool> Function()? moreTools;
   final List<Toolkit> toolkits;
   final List<Skill> skills;
 
@@ -410,6 +416,12 @@ class AgentSession {
         system: await a.systemPrompt(),
         messages: List.of(history),
         tools: tools,
+        moreTools: a.moreTools == null
+            ? null
+            : () => [
+                  for (final t in a.moreTools!())
+                    t.execute == null || (a.hooks.beforeToolCall == null && a.hooks.afterToolCall == null) ? t : a._hooked(t),
+                ],
         maxSteps: a.limits.maxSteps,
         stopWhen: overLimit,
         reasoning: a.reasoning,

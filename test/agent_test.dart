@@ -83,6 +83,49 @@ void main() {
       expect(model.requests.last.messages.where((m) => m.role == Role.tool), hasLength(2));
     });
 
+    test('moreTools adds tools mid-run, from the next step on', () async {
+      final loaded = <Tool>[];
+      var hooked = 0;
+      final weather = Tool(
+        name: 'weather',
+        description: 'The weather',
+        parameters: Schema.object({'city': Schema.string()}),
+        execute: (i) => {'city': i['city'], 'sky': 'sunny'},
+      );
+      final model = ScriptedModel([
+        [call('load_tools', {'name': 'weather'})],
+        [call('weather', {'city': 'Addis'})],
+        [const TextDelta('Sunny in Addis.')],
+      ]);
+      final agent = Agent(
+        name: 'lazy',
+        ai: testAi(),
+        languageModel: model,
+        tools: [
+          Tool(
+            name: 'load_tools',
+            description: 'Loads more tools',
+            parameters: Schema.object({'name': Schema.string()}),
+            execute: (_) {
+              loaded.add(weather);
+              return {'loaded': ['weather']};
+            },
+          ),
+        ],
+        moreTools: () => loaded,
+        hooks: AgentHooks(afterToolCall: (call, out) async {
+          if (call.name == 'weather') hooked++;
+          return null;
+        }),
+      );
+      final r = await agent.run('Weather in Addis?').result;
+      expect(r.text, 'Sunny in Addis.');
+      expect(model.requests.first.tools.map((t) => t.name), ['load_tools']);
+      expect(model.requests[1].tools.map((t) => t.name), ['load_tools', 'weather']);
+      expect(r.toolResults.last.output, {'city': 'Addis', 'sky': 'sunny'});
+      expect(hooked, 1, reason: 'hooks apply to loaded tools');
+    });
+
     test('a refused tool goes back to the model as an error', () async {
       final model = ScriptedModel([
         [call('delete_all', {})],

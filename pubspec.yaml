@@ -3,7 +3,7 @@ description: >-
   One Flutter API for every AI provider: Gemini, Vercel AI Gateway, OpenRouter
   and more. Stream text, call tools, build agents, and generate images, speech
   and video.
-version: 0.7.0
+version: 0.8.0
 homepage: https://github.com/dagmawibabi/omni_ai
 repository: https://github.com/dagmawibabi/omni_ai
 issue_tracker: https://github.com/dagmawibabi/omni_ai/issues

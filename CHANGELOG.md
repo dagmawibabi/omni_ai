@@ -1,3 +1,8 @@
+## 0.8.0
+
+- **Tools that join mid-run**: `Agent(moreTools: …)`, `OmniAI.agent(moreTools: …)`, `streamText` / `generateText(moreTools: …)`. The callback is checked before each step, so a tool the model asked to load (a "load tools" tool adding to a list) can be called from the next step. Hooks and approvals apply to them as to `tools`; names already offered are skipped. For apps with hundreds of tools that send only what a message needs.
+- Each step's request now carries its own copy of the tool list.
+
 ## 0.7.0
 
 - **OpenCode Zen** provider (`opencode`, `ai.openCode`, `OmniAI(openCodeKey: …)`): chat, streaming and tools for every Zen text model (GPT, Claude, Gemini, GLM, Kimi, DeepSeek, Qwen…) through its Chat Completions endpoint, which translates for models with another native API. `listModels` returns prices, cache prices, context and output limits, modalities, and reasoning/tool support. Zen's free models answer only the OpenCode app, so they are left out unless `includeFree` is set (and tagged `free`). `verify` reports a missing key, since the model list is public.

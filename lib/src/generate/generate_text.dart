@@ -129,6 +129,7 @@ StreamTextResult streamText({
   List<Message>? messages,
   List<Tool> tools = const [],
   List<Toolkit> toolkits = const [],
+  List<Tool> Function()? moreTools,
   ToolChoice? toolChoice,
   int maxSteps = 1,
   bool Function(StepResult step)? stopWhen,
@@ -180,6 +181,13 @@ StreamTextResult streamText({
     final toolMap = {for (final t in allTools) t.name: t};
     for (var step = 0; step < maxSteps; step++) {
       if (cancelToken?.isCancelled ?? false) throw const AiCancelledException();
+      // Tools added during the run (one the model asked to load) are
+      // offered from the next step on.
+      for (final t in moreTools?.call() ?? const <Tool>[]) {
+        if (toolMap.containsKey(t.name)) continue;
+        allTools.add(t);
+        toolMap[t.name] = t;
+      }
       parts.add(StepStart(step));
       final text = StringBuffer();
       final thought = StringBuffer();
@@ -189,7 +197,7 @@ StreamTextResult streamText({
 
       final request = LanguageModelRequest(
         messages: convo,
-        tools: allTools,
+        tools: List.of(allTools),
         toolChoice: toolChoice,
         temperature: temperature,
         topP: topP,
@@ -342,6 +350,7 @@ Future<GenerateTextResult> generateText({
   List<FilePart> files = const [],
   List<Message>? messages,
   List<Tool> tools = const [],
+  List<Tool> Function()? moreTools,
   List<Toolkit> toolkits = const [],
   ToolChoice? toolChoice,
   int maxSteps = 1,
@@ -369,6 +378,7 @@ Future<GenerateTextResult> generateText({
       files: files,
       messages: messages,
       tools: tools,
+      moreTools: moreTools,
       toolkits: toolkits,
       toolChoice: toolChoice,
       maxSteps: maxSteps,
