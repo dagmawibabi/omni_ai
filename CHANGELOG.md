@@ -1,6 +1,8 @@
-## Unreleased
+## 0.7.0
 
 - **OpenCode Zen** provider (`opencode`, `ai.openCode`, `OmniAI(openCodeKey: …)`): chat, streaming and tools for every Zen text model (GPT, Claude, Gemini, GLM, Kimi, DeepSeek, Qwen…) through its Chat Completions endpoint, which translates for models with another native API. `listModels` returns prices, cache prices, context and output limits, modalities, and reasoning/tool support. Zen's free models answer only the OpenCode app, so they are left out unless `includeFree` is set (and tagged `free`). `verify` reports a missing key, since the model list is public.
+- Analyzes cleanly on Flutter 3.50, which deprecates `package:flutter/material.dart`. The package keeps that import, since its replacement `package:material_ui` needs Flutter 3.47+ and this package supports 3.27+.
+- Updated dependencies within their existing ranges (`flutter_secure_storage` 11.2, `record` 7.2, `flutter_svg` 2.4).
 
 ## 0.6.1
 
