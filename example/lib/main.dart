@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+// Kept for Flutter < 3.47 (package:material_ui needs 3.47+).
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:omni_ai/omni_ai.dart';
 

@@ -1,3 +1,5 @@
+// Kept for Flutter < 3.47 (package:material_ui needs 3.47+).
+// ignore: deprecated_member_use
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
